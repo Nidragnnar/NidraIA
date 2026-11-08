@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-rem Compila o GeradorImagens.exe com o CMake do Visual Studio
+rem Compila o NidraIA.exe com o CMake do Visual Studio
 cd /d "%~dp0"
 
 set "CMAKE=cmake"
@@ -10,7 +10,7 @@ if errorlevel 1 set "CMAKE=%ProgramFiles%\Microsoft Visual Studio\18\Community\C
 "%CMAKE%" -S . -B build -G "Visual Studio 18 2026" -A x64 || goto erro
 "%CMAKE%" --build build --config Release || goto erro
 echo.
-echo Pronto: GeradorImagens.exe
+echo Pronto: NidraIA.exe
 exit /b 0
 
 :erro
