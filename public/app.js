@@ -1,11 +1,18 @@
-// Interface do Gerador de Imagens: envia o pedido, mostra a prévia e cuida da galeria
+// Interface do NidraIA: envia o pedido, mostra a prévia e cuida da galeria
 const $ = (seletor) => document.querySelector(seletor);
 
 const el = {
     estado: $("#estado"),
     estadoTexto: $("#estado-texto"),
     log: $("#log"),
+    versao: $("#versao"),
     form: $("#form"),
+    modelo: $("#modelo"),
+    modeloDesc: $("#modelo-desc"),
+    traduzir: $("#traduzir"),
+    traduzirOpcao: $("#traduzir-opcao"),
+    atualTraducao: $("#atual-traducao"),
+    visOriginal: $("#vis-original"),
     prompt: $("#prompt"),
     negativo: $("#negativo"),
     quantidade: $("#quantidade"),
@@ -33,6 +40,9 @@ const el = {
 };
 
 let motorPronto = false;
+let trocandoModelo = false;
+let modelos = [];
+let modeloAtivo = null;
 let trabalhoAtual = null;
 let galeria = [];
 let abertoNoVisualizador = null;
@@ -71,23 +81,29 @@ const TEXTOS_ESTADO = {
     parado: "Motor parado",
 };
 
+// Consulta o estado até o motor ficar pronto (ou dar erro)
 async function acompanharMotor() {
-    let primeiraVez = true;
     for (;;) {
         try {
             const estado = await api("/api/estado");
-            if (primeiraVez) {
-                aplicarPadroes(estado.padroes);
-                primeiraVez = false;
+            el.versao.textContent = `v${estado.versao}`;
+            el.traduzirOpcao.hidden = !estado.tradutor;
+            if (estado.modelo !== modeloAtivo || !modelos.length) {
+                modelos = estado.modelos;
+                modeloAtivo = estado.modelo;
+                montarSeletorModelos();
+                aplicarPadroes(modeloAtual());
             }
+            const nome = modeloAtual()?.nome || "";
             el.estado.dataset.estado = estado.estado;
             el.estadoTexto.textContent =
-                estado.estado === "pronto" ? `Pronto · ${estado.modelo.replace(/\.safetensors$/, "")}` : TEXTOS_ESTADO[estado.estado] || estado.estado;
+                estado.estado === "pronto" ? `Pronto · ${nome}` : estado.estado === "carregando" ? `Carregando ${nome}...` : TEXTOS_ESTADO[estado.estado] || estado.estado;
             el.log.textContent = estado.log.join("\n");
             motorPronto = estado.estado === "pronto";
+            if (estado.estado !== "carregando") trocandoModelo = false;
             atualizarBotoes();
             if (estado.estado === "erro") el.log.hidden = false;
-            if (motorPronto) return;
+            if (estado.estado !== "carregando") return;
         } catch {
             el.estado.dataset.estado = "erro";
             el.estadoTexto.textContent = "Servidor desligado";
@@ -96,11 +112,49 @@ async function acompanharMotor() {
     }
 }
 
-function aplicarPadroes(padroes) {
-    el.passos.value = padroes.passos;
-    el.cfg.value = padroes.cfg;
+const modeloAtual = () => modelos.find((m) => m.id === modeloAtivo);
+
+function montarSeletorModelos() {
+    el.modelo.replaceChildren(
+        ...modelos.map((m) => {
+            const opcao = document.createElement("option");
+            opcao.value = m.id;
+            opcao.textContent = m.disponivel ? m.nome : `${m.nome} (não baixado)`;
+            opcao.disabled = !m.disponivel;
+            return opcao;
+        })
+    );
+    el.modelo.value = modeloAtivo;
+    const m = modeloAtual();
+    el.modeloDesc.textContent = m ? `${m.descricao} Licença: ${m.licenca}.` : "";
+}
+
+function aplicarPadroes(modelo) {
+    if (!modelo) return;
+    const p = modelo.padroes;
+    el.passos.max = modelo.maxPassos;
+    el.passos.value = p.passos;
+    el.cfg.value = p.cfg;
+    const formato = el.form.querySelector(`input[name=formato][value="${p.largura}x${p.altura}"]`);
+    if (formato) formato.checked = true;
     mostrarValores();
 }
+
+el.modelo.addEventListener("change", async () => {
+    const escolhido = el.modelo.value;
+    if (escolhido === modeloAtivo) return;
+    trocandoModelo = true;
+    motorPronto = false;
+    atualizarBotoes();
+    try {
+        await api("/api/modelo", { method: "POST", body: JSON.stringify({ id: escolhido }) });
+        avisar("Trocando de modelo. Isso leva alguns segundos.");
+    } catch (erro) {
+        avisar(erro.message);
+        el.modelo.value = modeloAtivo;
+    }
+    acompanharMotor();
+});
 
 function mostrarValores() {
     el.passosValor.textContent = el.passos.value;
@@ -110,6 +164,8 @@ function mostrarValores() {
 function atualizarBotoes() {
     el.gerar.disabled = !motorPronto || Boolean(trabalhoAtual);
     el.cancelar.hidden = !trabalhoAtual;
+    // Não deixa trocar de modelo no meio de uma geração
+    el.modelo.disabled = Boolean(trabalhoAtual) || trocandoModelo;
 }
 
 el.estado.addEventListener("click", () => {
@@ -133,16 +189,23 @@ async function gerar() {
         seed: seedTexto ? Number(seedTexto) : -1,
         passos: Number(el.passos.value),
         cfg: Number(el.cfg.value),
+        traduzir: !el.traduzirOpcao.hidden && el.traduzir.checked,
     };
 
+    // Já trava o botão: a tradução pode levar alguns segundos antes de a geração começar
+    trabalhoAtual = "enviando";
+    atualizarBotoes();
+    iniciarAtual(pedido);
+    if (pedido.traduzir) el.atualStatus.textContent = "Traduzindo o prompt...";
     try {
-        const { id } = await api("/api/gerar", { method: "POST", body: JSON.stringify(pedido) });
-        trabalhoAtual = id;
-        atualizarBotoes();
-        iniciarAtual(pedido);
-        await acompanhar(id, pedido);
+        const resposta = await api("/api/gerar", { method: "POST", body: JSON.stringify(pedido) });
+        trabalhoAtual = resposta.id;
+        el.atualTraducao.hidden = !resposta.traduzido;
+        el.atualTraducao.textContent = resposta.traduzido ? `Em inglês: ${resposta.prompt}` : "";
+        await acompanhar(resposta.id, pedido);
     } catch (erro) {
         mostrarErro(erro.message);
+        el.atual.hidden = true;
     } finally {
         trabalhoAtual = null;
         atualizarBotoes();
@@ -156,6 +219,7 @@ function mostrarErro(texto) {
 
 function iniciarAtual(pedido) {
     el.atual.hidden = false;
+    el.atualTraducao.hidden = true;
     el.atualStatus.textContent = "Na fila...";
     el.barra.style.width = "0%";
     el.atualImagens.replaceChildren(
@@ -220,7 +284,7 @@ document.addEventListener("keydown", (evento) => {
 });
 
 el.cancelar.addEventListener("click", async () => {
-    if (!trabalhoAtual) return;
+    if (!trabalhoAtual || trabalhoAtual === "enviando") return;
     el.atualStatus.textContent = "Cancelando...";
     try {
         await api(`/api/trabalhos/${trabalhoAtual}/cancelar`, { method: "POST" });
@@ -269,6 +333,8 @@ function abrir(item) {
     el.visImagem.src = `/galeria/${item.arquivo}`;
     el.visImagem.alt = item.prompt;
     el.visPrompt.textContent = item.prompt;
+    el.visOriginal.hidden = !item.promptOriginal;
+    el.visOriginal.textContent = item.promptOriginal ? `Você escreveu: ${item.promptOriginal}` : "";
     el.visBaixar.href = `/galeria/${item.arquivo}`;
     el.visBaixar.download = `${item.id}.png`;
 
@@ -301,8 +367,10 @@ el.vis.addEventListener("click", (evento) => {
 
 $("#vis-reusar").addEventListener("click", () => {
     const item = abertoNoVisualizador;
+    // Usa o prompt em inglês que gerou a imagem e desliga a tradução, para repetir exatamente
     el.prompt.value = item.prompt;
     el.negativo.value = item.negativo || "";
+    el.traduzir.checked = false;
     const formato = el.form.querySelector(`input[name=formato][value="${item.largura}x${item.altura}"]`);
     if (formato) formato.checked = true;
     el.quantidade.value = "1";
@@ -312,7 +380,8 @@ $("#vis-reusar").addEventListener("click", () => {
     mostrarValores();
     el.vis.close();
     el.prompt.focus();
-    avisar("Configurações carregadas. Mesma semente = mesma imagem.");
+    const outroModelo = item.modelo !== modeloAtual()?.nome;
+    avisar(outroModelo ? `Configurações carregadas. A imagem foi feita com ${item.modelo}: troque o modelo para repetir igual.` : "Configurações carregadas. Mesma semente = mesma imagem.");
 });
 
 $("#vis-apagar").addEventListener("click", async () => {

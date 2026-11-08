@@ -1,6 +1,10 @@
 # Arquivos grandes, gerados ou compilados (não vão para o Git)
 motor/
 modelos/
+tradutor/
 galeria/
 build/
+dist/
+NidraIA.exe
 GeradorImagens.exe
+preferencias.json

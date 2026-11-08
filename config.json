@@ -1,12 +1,50 @@
 {
     "portaApp": 3333,
     "portaMotor": 1234,
-    "modelo": "sd_xl_turbo_1.0_fp16.safetensors",
-    "padroes": {
-        "largura": 512,
-        "altura": 512,
-        "passos": 4,
-        "cfg": 1.0,
-        "amostrador": "euler_a"
+    "portaTradutor": 1235,
+    "modeloPadrao": "sdxl-turbo",
+    "modelos": [
+        {
+            "id": "sdxl-turbo",
+            "nome": "SDXL Turbo",
+            "descricao": "O mais rápido (cerca de 5 s). Bom para testar ideias.",
+            "licenca": "Stability AI: uso não comercial",
+            "arquivos": {
+                "model": "sd_xl_turbo_1.0_fp16.safetensors"
+            },
+            "padroes": {
+                "largura": 512,
+                "altura": 512,
+                "passos": 4,
+                "cfg": 1,
+                "amostrador": "euler_a"
+            },
+            "maxPassos": 12
+        },
+        {
+            "id": "flux-schnell",
+            "nome": "FLUX.1 schnell",
+            "descricao": "Mais qualidade e entende melhor o prompt, mas é mais lento.",
+            "licenca": "Apache 2.0: livre, inclusive uso comercial",
+            "arquivos": {
+                "diffusion-model": "flux-schnell/flux1-schnell-q4_0.gguf",
+                "vae": "flux-schnell/ae.safetensors",
+                "clip_l": "flux-schnell/clip_l.safetensors",
+                "t5xxl": "flux-schnell/t5-v1_1-xxl-encoder-Q4_K_M.gguf"
+            },
+            "padroes": {
+                "largura": 512,
+                "altura": 512,
+                "passos": 4,
+                "cfg": 1,
+                "amostrador": "euler"
+            },
+            "maxPassos": 8
+        }
+    ],
+    "tradutor": {
+        "executavel": "tradutor/llama-server.exe",
+        "modelo": "tradutor/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+        "desligarAposMinutos": 5
     }
 }

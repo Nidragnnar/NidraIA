@@ -1,5 +1,6 @@
-// Gerador de Imagens: liga o motor (sd-server.exe), serve a interface em public/
-// e guarda as imagens geradas na pasta galeria/. Só aceita conexões deste computador.
+// NidraIA: liga o motor de imagens (sd-server.exe) e o tradutor (llama-server.exe),
+// serve a interface em public/ e guarda as imagens na pasta galeria/.
+// Só aceita conexões deste computador.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -27,6 +28,8 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
+
+static constexpr const char* VERSAO = "0.2.0";
 
 // ========== Caminhos e configuração ==========
 struct Pastas {
@@ -59,14 +62,20 @@ static fs::path caminhoU8(const std::string& texto) {
     return fs::path(std::u8string(texto.begin(), texto.end()));
 }
 
-// ========== Log do motor ==========
+// ========== Erros HTTP ==========
+struct ErroHttp : std::runtime_error {
+    int status;
+    ErroHttp(int status, const std::string& mensagem) : std::runtime_error(mensagem), status(status) {}
+};
+
+// ========== Log ==========
 static std::mutex mutexLog;
 static std::deque<std::string> linhasLog;
 
 static void registrar(const std::string& linha) {
     std::lock_guard trava(mutexLog);
     linhasLog.push_back(linha);
-    if (linhasLog.size() > 200) linhasLog.pop_front();
+    if (linhasLog.size() > 300) linhasLog.pop_front();
 }
 
 static std::vector<std::string> ultimasLinhas(size_t quantidade) {
@@ -75,25 +84,19 @@ static std::vector<std::string> ultimasLinhas(size_t quantidade) {
     return {inicio, linhasLog.end()};
 }
 
-// ========== Motor (sd-server.exe) ==========
-enum class EstadoMotor { Carregando, Pronto, Erro };
+// ========== Processos filhos ==========
+// Job object: se o NidraIA fechar (mesmo à força), o Windows encerra o motor e o tradutor junto
+static HANDLE jobFilhos = nullptr;
 
-static std::atomic<EstadoMotor> estadoMotor{EstadoMotor::Carregando};
-static std::mutex mutexErro;
-static std::string erroMotor;
-static HANDLE processoMotor = nullptr;
-
-static void falharMotor(const std::string& mensagem) {
-    {
-        std::lock_guard trava(mutexErro);
-        erroMotor = mensagem;
-    }
-    estadoMotor = EstadoMotor::Erro;
-    registrar("[gerador] " + mensagem);
+static void prepararJob() {
+    jobFilhos = CreateJobObjectW(nullptr, nullptr);
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limites{};
+    limites.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    SetInformationJobObject(jobFilhos, JobObjectExtendedLimitInformation, &limites, sizeof(limites));
 }
 
-// Lê a saída do motor linha por linha e guarda no log
-static void lerSaida(HANDLE leitura) {
+// Lê a saída de um processo linha por linha e guarda no log com um prefixo
+static void lerSaida(HANDLE leitura, std::string prefixo) {
     std::string pendente;
     char buffer[4096];
     DWORD lidos = 0;
@@ -101,11 +104,11 @@ static void lerSaida(HANDLE leitura) {
         pendente.append(buffer, lidos);
         size_t fim;
         while ((fim = pendente.find_first_of("\r\n")) != std::string::npos) {
-            if (fim > 0) registrar(pendente.substr(0, fim));
+            if (fim > 0) registrar(prefixo + pendente.substr(0, fim));
             pendente.erase(0, fim + 1);
         }
     }
-    if (!pendente.empty()) registrar(pendente);
+    if (!pendente.empty()) registrar(prefixo + pendente);
     CloseHandle(leitura);
 }
 
@@ -113,18 +116,8 @@ static std::wstring aspas(const fs::path& caminho) {
     return L"\"" + caminho.wstring() + L"\"";
 }
 
-static bool ligarMotor() {
-    fs::path exe = pastas.motor / "sd-server.exe";
-    fs::path modelo = pastas.modelos / caminhoU8(config["modelo"].get<std::string>());
-    if (!fs::exists(exe)) return falharMotor("Motor não encontrado em " + u8(exe)), false;
-    if (!fs::exists(modelo)) return falharMotor("Modelo não encontrado: " + u8(modelo.filename())), false;
-
-    // Job object: se o gerador fechar (mesmo à força), o Windows encerra o motor junto
-    HANDLE job = CreateJobObjectW(nullptr, nullptr);
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limites{};
-    limites.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limites, sizeof(limites));
-
+// Inicia um programa escondido, com a saída indo para o log; devolve o handle do processo
+static HANDLE iniciarProcesso(const fs::path& exe, const std::wstring& argumentos, const std::string& prefixo) {
     SECURITY_ATTRIBUTES herdavel{sizeof(herdavel), nullptr, TRUE};
     HANDLE leitura = nullptr, escrita = nullptr;
     CreatePipe(&leitura, &escrita, &herdavel, 0);
@@ -136,25 +129,158 @@ static bool ligarMotor() {
     inicio.hStdError = escrita;
     inicio.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
 
-    std::wstring linha = aspas(exe) + L" --listen-ip 127.0.0.1 --listen-port " +
-                         std::to_wstring(config["portaMotor"].get<int>()) + L" -m " + aspas(modelo) +
-                         L" --model-dir " + aspas(pastas.modelos);
-
+    std::wstring linha = aspas(exe) + L" " + argumentos;
     PROCESS_INFORMATION info{};
     BOOL ok = CreateProcessW(nullptr, linha.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED,
-                             nullptr, pastas.motor.wstring().c_str(), &inicio, &info);
+                             nullptr, exe.parent_path().wstring().c_str(), &inicio, &info);
     CloseHandle(escrita);
     if (!ok) {
         CloseHandle(leitura);
-        return falharMotor(std::format("Não foi possível iniciar o motor (erro {}).", GetLastError())), false;
+        throw ErroHttp(500, std::format("Não foi possível iniciar {} (erro {}).", u8(exe.filename()), GetLastError()));
     }
-    AssignProcessToJobObject(job, info.hProcess);
+    AssignProcessToJobObject(jobFilhos, info.hProcess);
     ResumeThread(info.hThread);
     CloseHandle(info.hThread);
-    processoMotor = info.hProcess;
+    std::thread(lerSaida, leitura, prefixo).detach();
+    return info.hProcess;
+}
 
-    std::thread(lerSaida, leitura).detach();
-    return true;
+static void encerrarProcesso(HANDLE& processo) {
+    if (!processo) return;
+    TerminateProcess(processo, 0);
+    WaitForSingleObject(processo, 5000);
+    CloseHandle(processo);
+    processo = nullptr;
+}
+
+static bool respondeOk(int porta, const char* caminho) {
+    httplib::Client cliente("127.0.0.1", porta);
+    cliente.set_connection_timeout(1s);
+    cliente.set_read_timeout(3s);
+    auto resposta = cliente.Get(caminho);
+    return resposta && resposta->status == 200;
+}
+
+// ========== Modelos ==========
+static const json* acharModelo(const std::string& id) {
+    for (const auto& modelo : config["modelos"])
+        if (modelo["id"] == id) return &modelo;
+    return nullptr;
+}
+
+static std::vector<std::string> arquivosFaltando(const json& modelo) {
+    std::vector<std::string> faltando;
+    for (const auto& item : modelo["arquivos"].items())
+        if (!fs::exists(pastas.modelos / caminhoU8(item.value().get<std::string>()))) faltando.push_back(item.value());
+    return faltando;
+}
+
+// Preferências do usuário (modelo escolhido) ficam fora do config.json
+static fs::path arquivoPreferencias() {
+    return pastas.raiz / "preferencias.json";
+}
+
+static void salvarPreferencias(const std::string& modelo) {
+    std::ofstream(arquivoPreferencias()) << json{{"modelo", modelo}}.dump(2);
+}
+
+static std::string modeloInicial() {
+    std::ifstream entrada(arquivoPreferencias());
+    json prefs = json::parse(entrada, nullptr, false);
+    if (prefs.is_object() && prefs.contains("modelo") && acharModelo(prefs["modelo"].get<std::string>()))
+        return prefs["modelo"].get<std::string>();
+    return config["modeloPadrao"].get<std::string>();
+}
+
+// ========== Motor (sd-server.exe) ==========
+enum class EstadoMotor { Parado, Carregando, Pronto, Erro };
+
+static std::mutex mutexMotor;  // protege tudo abaixo
+static EstadoMotor estadoMotor = EstadoMotor::Parado;
+static std::string erroMotor;
+static std::string modeloAtivo;
+static HANDLE processoMotor = nullptr;
+static int geracaoMotor = 0;  // muda a cada troca de modelo, para ignorar avisos do motor anterior
+
+static void falharMotor(int geracao, const std::string& mensagem) {
+    std::lock_guard trava(mutexMotor);
+    if (geracao != geracaoMotor) return;
+    estadoMotor = EstadoMotor::Erro;
+    erroMotor = mensagem;
+    registrar("[nidraia] " + mensagem);
+}
+
+// O modelo leva alguns segundos para carregar; consulta até o motor responder
+static void vigiarMotor(int geracao, HANDLE processo) {
+    int porta = config["portaMotor"].get<int>();
+    for (int tentativa = 0; tentativa < 600; tentativa++) {
+        if (WaitForSingleObject(processo, 0) == WAIT_OBJECT_0) {
+            DWORD codigo = 0;
+            GetExitCodeProcess(processo, &codigo);
+            return falharMotor(geracao, std::format("O motor parou (código {}). Veja o log.", codigo));
+        }
+        if (respondeOk(porta, "/sdcpp/v1/capabilities")) {
+            std::lock_guard trava(mutexMotor);
+            if (geracao != geracaoMotor) return;
+            estadoMotor = EstadoMotor::Pronto;
+            registrar("[nidraia] Motor pronto: " + modeloAtivo);
+            break;
+        }
+        std::this_thread::sleep_for(1s);
+    }
+    {
+        std::lock_guard trava(mutexMotor);
+        if (geracao != geracaoMotor) return;
+        if (estadoMotor == EstadoMotor::Carregando) {
+            estadoMotor = EstadoMotor::Erro;
+            erroMotor = "O motor demorou demais para responder.";
+            return;
+        }
+    }
+    // Avisa se o motor cair depois de pronto (numa troca de modelo a geração muda e isso é ignorado)
+    WaitForSingleObject(processo, INFINITE);
+    falharMotor(geracao, "O motor parou de funcionar. Feche e abra o NidraIA de novo.");
+}
+
+// Liga o motor com o modelo pedido, encerrando o anterior se houver
+static void ligarMotor(const std::string& id) {
+    const json* modelo = acharModelo(id);
+    if (!modelo) throw ErroHttp(404, "Modelo desconhecido.");
+    auto faltando = arquivosFaltando(*modelo);
+    if (!faltando.empty()) throw ErroHttp(409, "Faltam arquivos do modelo: " + faltando.front());
+
+    fs::path exe = pastas.motor / "sd-server.exe";
+    if (!fs::exists(exe)) throw ErroHttp(500, "Motor não encontrado em " + u8(exe));
+
+    // Cada arquivo do modelo vira uma opção do motor: "model" → -m, "vae" → --vae...
+    std::wstring argumentos = L"--listen-ip 127.0.0.1 --listen-port " + std::to_wstring(config["portaMotor"].get<int>());
+    for (const auto& [chave, arquivo] : (*modelo)["arquivos"].items()) {
+        std::wstring opcao = chave == "model" ? L"-m" : L"--" + std::wstring(chave.begin(), chave.end());
+        argumentos += L" " + opcao + L" " + aspas(pastas.modelos / caminhoU8(arquivo.get<std::string>()));
+    }
+
+    std::lock_guard trava(mutexMotor);
+    geracaoMotor++;
+    encerrarProcesso(processoMotor);
+    modeloAtivo = id;
+    estadoMotor = EstadoMotor::Carregando;
+    erroMotor.clear();
+    registrar("[nidraia] Carregando " + (*modelo)["nome"].get<std::string>() + "...");
+    try {
+        processoMotor = iniciarProcesso(exe, argumentos, "");
+    } catch (const ErroHttp& erro) {
+        estadoMotor = EstadoMotor::Erro;
+        erroMotor = erro.what();
+        throw;
+    }
+    HANDLE copia = nullptr;
+    DuplicateHandle(GetCurrentProcess(), processoMotor, GetCurrentProcess(), &copia, 0, FALSE, DUPLICATE_SAME_ACCESS);
+    std::thread(
+        [geracao = geracaoMotor, copia] {
+            vigiarMotor(geracao, copia);
+            CloseHandle(copia);
+        })
+        .detach();
 }
 
 static httplib::Client clienteMotor() {
@@ -164,37 +290,11 @@ static httplib::Client clienteMotor() {
     return cliente;
 }
 
-// O modelo leva alguns segundos para carregar; consulta até o motor responder
-static void esperarMotor() {
-    for (int tentativa = 0; tentativa < 300; tentativa++) {
-        if (WaitForSingleObject(processoMotor, 0) == WAIT_OBJECT_0) {
-            DWORD codigo = 0;
-            GetExitCodeProcess(processoMotor, &codigo);
-            return falharMotor(std::format("O motor parou (código {}). Veja o log.", codigo));
-        }
-        auto resposta = clienteMotor().Get("/sdcpp/v1/capabilities");
-        if (resposta && resposta->status == 200) {
-            estadoMotor = EstadoMotor::Pronto;
-            registrar("[gerador] Motor pronto.");
-            break;
-        }
-        std::this_thread::sleep_for(1s);
-    }
-    if (estadoMotor == EstadoMotor::Carregando) return falharMotor("O motor demorou demais para responder.");
-
-    // Avisa se o motor cair depois de pronto
-    WaitForSingleObject(processoMotor, INFINITE);
-    falharMotor("O motor parou de funcionar. Feche e abra o gerador de novo.");
-}
-
-// ========== Erros HTTP ==========
-struct ErroHttp : std::runtime_error {
-    int status;
-    ErroHttp(int status, const std::string& mensagem) : std::runtime_error(mensagem), status(status) {}
-};
-
 static json chamarMotor(const std::string& metodo, const std::string& caminho, const json& corpo = nullptr) {
-    if (estadoMotor != EstadoMotor::Pronto) throw ErroHttp(503, "O motor ainda não está pronto.");
+    {
+        std::lock_guard trava(mutexMotor);
+        if (estadoMotor != EstadoMotor::Pronto) throw ErroHttp(503, "O motor ainda não está pronto.");
+    }
     auto cliente = clienteMotor();
     auto resposta = metodo == "POST" ? cliente.Post(caminho, corpo.is_null() ? "{}" : corpo.dump(), "application/json")
                                      : cliente.Get(caminho);
@@ -211,6 +311,97 @@ static json chamarMotor(const std::string& metodo, const std::string& caminho, c
     }
     if (dados.is_discarded()) throw ErroHttp(502, "Resposta inválida do motor.");
     return dados;
+}
+
+// ========== Tradutor (llama-server.exe) ==========
+// Liga sob demanda na primeira tradução e fica na CPU, para não disputar a placa de vídeo com o motor
+static std::mutex mutexTradutor;
+static HANDLE processoTradutor = nullptr;
+static std::chrono::steady_clock::time_point ultimoUsoTradutor;
+
+// O tradutor ocupa uns 2,5 GB de RAM: desliga depois de alguns minutos sem uso (religa sozinho quando precisar)
+static void desligarTradutorOcioso() {
+    for (;;) {
+        std::this_thread::sleep_for(30s);
+        std::lock_guard trava(mutexTradutor);
+        if (processoTradutor && std::chrono::steady_clock::now() - ultimoUsoTradutor > std::chrono::minutes(config["tradutor"].value("desligarAposMinutos", 5))) {
+            encerrarProcesso(processoTradutor);
+            registrar("[nidraia] Tradutor desligado por falta de uso (libera memória).");
+        }
+    }
+}
+
+static bool tradutorDisponivel() {
+    const auto& t = config["tradutor"];
+    return fs::exists(pastas.raiz / caminhoU8(t["executavel"].get<std::string>())) &&
+           fs::exists(pastas.raiz / caminhoU8(t["modelo"].get<std::string>()));
+}
+
+static void garantirTradutor() {
+    int porta = config["portaTradutor"].get<int>();
+    std::lock_guard trava(mutexTradutor);
+    ultimoUsoTradutor = std::chrono::steady_clock::now();
+    if (processoTradutor && WaitForSingleObject(processoTradutor, 0) == WAIT_TIMEOUT && respondeOk(porta, "/health")) return;
+    if (!tradutorDisponivel()) throw ErroHttp(409, "O tradutor não está instalado (pasta tradutor/).");
+
+    encerrarProcesso(processoTradutor);
+    const auto& t = config["tradutor"];
+    registrar("[nidraia] Ligando o tradutor...");
+    processoTradutor = iniciarProcesso(pastas.raiz / caminhoU8(t["executavel"].get<std::string>()),
+                                       L"--host 127.0.0.1 --port " + std::to_wstring(porta) + L" -m " +
+                                           aspas(pastas.raiz / caminhoU8(t["modelo"].get<std::string>())) +
+                                           L" -ngl 0 -c 2048",
+                                       "[tradutor] ");
+    for (int tentativa = 0; tentativa < 120; tentativa++) {
+        if (WaitForSingleObject(processoTradutor, 0) == WAIT_OBJECT_0) throw ErroHttp(500, "O tradutor parou ao iniciar. Veja o log.");
+        if (respondeOk(porta, "/health")) {
+            registrar("[nidraia] Tradutor pronto.");
+            return;
+        }
+        std::this_thread::sleep_for(500ms);
+    }
+    throw ErroHttp(504, "O tradutor demorou demais para iniciar.");
+}
+
+static std::string traduzir(const std::string& texto) {
+    garantirTradutor();
+    // Exemplos curtos ensinam o formato e a não trocar um animal ou objeto por outro
+    static const std::vector<std::pair<std::string, std::string>> exemplos{
+        {"uma raposa correndo na neve, foto", "a fox running in the snow, photo"},
+        {"menino tocando violão na praia, aquarela", "boy playing acoustic guitar on the beach, watercolor"},
+        {"a cute cat astronaut, digital art", "a cute cat astronaut, digital art"},
+        {"onça-pintada e capivara na beira do rio, ilustração", "jaguar and capybara on the riverbank, illustration"},
+        {"crianças soltando pipa no fim de tarde", "children flying kites in the late afternoon"},
+    };
+    json mensagens = json::array();
+    mensagens.push_back({{"role", "system"},
+                         {"content",
+                          "You are a precise Portuguese-to-English translator for image-generation prompts. Translate "
+                          "faithfully: never replace an animal, object or person with a different one and never add "
+                          "details. Keep the same order, commas and tags. If the text is already English, repeat it "
+                          "unchanged. Output ONLY the English text."}});
+    for (const auto& [pt, en] : exemplos) {
+        mensagens.push_back({{"role", "user"}, {"content", pt}});
+        mensagens.push_back({{"role", "assistant"}, {"content", en}});
+    }
+    mensagens.push_back({{"role", "user"}, {"content", texto}});
+    json pedido = {
+        {"messages", mensagens},
+        {"temperature", 0},
+        {"max_tokens", 600},
+    };
+    httplib::Client cliente("127.0.0.1", config["portaTradutor"].get<int>());
+    cliente.set_read_timeout(60s);
+    auto resposta = cliente.Post("/v1/chat/completions", pedido.dump(), "application/json");
+    if (!resposta || resposta->status != 200) throw ErroHttp(502, "O tradutor não respondeu.");
+    json dados = json::parse(resposta->body, nullptr, false);
+    if (dados.is_discarded()) throw ErroHttp(502, "Resposta inválida do tradutor.");
+    std::string traducao = dados["choices"][0]["message"]["content"].get<std::string>();
+    // Tira espaços e aspas que o modelo às vezes coloca em volta
+    auto inicio = traducao.find_first_not_of(" \t\r\n\"");
+    auto fim = traducao.find_last_not_of(" \t\r\n\"");
+    if (inicio == std::string::npos) throw ErroHttp(502, "O tradutor devolveu um texto vazio.");
+    return traducao.substr(inicio, fim - inicio + 1);
 }
 
 // ========== Pedidos de geração ==========
@@ -250,8 +441,8 @@ static int64_t sementeOuSorteio(const json& corpo) {
     return std::uniform_int_distribution<int64_t>(0, (1LL << 31) - 1)(gerador);
 }
 
-static json montarPedido(const json& corpo) {
-    const auto& p = config["padroes"];
+static json montarPedido(const json& corpo, const json& modelo) {
+    const auto& p = modelo["padroes"];
     std::string prompt = texto(corpo, "prompt");
     if (prompt.empty()) throw ErroHttp(422, "Escreva o que você quer ver na imagem.");
     if (prompt.size() > 4000) throw ErroHttp(422, "O prompt está grande demais.");
@@ -260,17 +451,28 @@ static json montarPedido(const json& corpo) {
     auto lado = [&](const char* campo, int padrao) {
         return static_cast<int>(std::lround(numero(corpo, campo, 256, 1536, padrao) / 64.0) * 64);
     };
-    return {
+    std::string negativo = texto(corpo, "negativo").substr(0, 4000);
+    bool traduzirPrompt = corpo.value("traduzir", false);
+
+    json pedido = {
         {"prompt", prompt},
-        {"negativo", texto(corpo, "negativo").substr(0, 4000)},
+        {"promptOriginal", nullptr},
+        {"negativo", negativo},
         {"largura", lado("largura", p["largura"].get<int>())},
         {"altura", lado("altura", p["altura"].get<int>())},
-        {"passos", static_cast<int>(std::lround(numero(corpo, "passos", 1, 50, p["passos"].get<int>())))},
+        {"passos", static_cast<int>(std::lround(numero(corpo, "passos", 1, modelo["maxPassos"].get<int>(), p["passos"].get<int>())))},
         {"cfg", numero(corpo, "cfg", 1, 20, p["cfg"].get<double>())},
         {"seed", sementeOuSorteio(corpo)},
         {"quantidade", static_cast<int>(std::lround(numero(corpo, "quantidade", 1, 4, 1)))},
         {"amostrador", p["amostrador"]},
+        {"traduzido", traduzirPrompt},
     };
+    if (traduzirPrompt) {
+        pedido["promptOriginal"] = prompt;
+        pedido["prompt"] = traduzir(prompt);
+        if (!negativo.empty()) pedido["negativo"] = traduzir(negativo);
+    }
+    return pedido;
 }
 
 static json paraMotor(const json& pedido) {
@@ -347,7 +549,6 @@ static json salvarImagens(const json& trabalho, const json& pedido) {
         info["arquivo"] = dia + "/" + id + ".png";
         info["criadoEm"] = agoraIso();
         info["segundos"] = segundos;
-        info["modelo"] = config["modelo"];
         // Em lote, o motor usa semente, semente + 1, semente + 2...
         info["seed"] = pedido["seed"].get<int64_t>() + indice;
         gravar(pasta / (id + ".json"), info.dump(2));
@@ -392,8 +593,29 @@ static const char* nomeEstado(EstadoMotor estado) {
     switch (estado) {
         case EstadoMotor::Pronto: return "pronto";
         case EstadoMotor::Erro: return "erro";
+        case EstadoMotor::Parado: return "parado";
         default: return "carregando";
     }
+}
+
+static json listaModelos() {
+    json lista = json::array();
+    for (const auto& modelo : config["modelos"]) {
+        auto faltando = arquivosFaltando(modelo);
+        lista.push_back({{"id", modelo["id"]},
+                         {"nome", modelo["nome"]},
+                         {"descricao", modelo["descricao"]},
+                         {"licenca", modelo["licenca"]},
+                         {"padroes", modelo["padroes"]},
+                         {"maxPassos", modelo["maxPassos"]},
+                         {"disponivel", faltando.empty()}});
+    }
+    return lista;
+}
+
+static bool temGeracaoEmAndamento() {
+    std::lock_guard trava(mutexPedidos);
+    return !pedidos.empty();
 }
 
 static const std::regex ID_TRABALHO{"^[A-Za-z0-9_-]{1,80}$"};
@@ -401,28 +623,52 @@ static const std::regex ID_IMAGEM{"^[A-Za-z0-9_-]{1,90}$"};
 
 static void configurarRotas(httplib::Server& servidor) {
     servidor.Get("/api/estado", [](const httplib::Request&, httplib::Response& res) {
-        std::string erro;
+        json estado;
         {
-            std::lock_guard trava(mutexErro);
-            erro = erroMotor;
+            std::lock_guard trava(mutexMotor);
+            estado = {{"estado", nomeEstado(estadoMotor)},
+                      {"erro", erroMotor.empty() ? json(nullptr) : json(erroMotor)},
+                      {"modelo", modeloAtivo}};
         }
-        responderJson(res, 200,
-                      {{"estado", nomeEstado(estadoMotor)},
-                       {"erro", erro.empty() ? json(nullptr) : json(erro)},
-                       {"modelo", config["modelo"]},
-                       {"padroes", config["padroes"]},
-                       {"log", ultimasLinhas(40)}});
+        estado["versao"] = VERSAO;
+        estado["modelos"] = listaModelos();
+        estado["tradutor"] = tradutorDisponivel();
+        estado["log"] = ultimasLinhas(60);
+        responderJson(res, 200, estado);
+    });
+
+    servidor.Post("/api/modelo", [](const httplib::Request& req, httplib::Response& res) {
+        std::string id = texto(lerCorpo(req), "id");
+        if (temGeracaoEmAndamento()) throw ErroHttp(409, "Espere a geração atual terminar para trocar de modelo.");
+        ligarMotor(id);
+        salvarPreferencias(id);
+        responderJson(res, 202, {{"modelo", id}});
+    });
+
+    servidor.Post("/api/traduzir", [](const httplib::Request& req, httplib::Response& res) {
+        std::string original = texto(lerCorpo(req), "texto");
+        if (original.empty()) throw ErroHttp(422, "Escreva algo para traduzir.");
+        responderJson(res, 200, {{"traducao", traduzir(original)}});
     });
 
     servidor.Post("/api/gerar", [](const httplib::Request& req, httplib::Response& res) {
-        json pedido = montarPedido(lerCorpo(req));
+        json corpo = lerCorpo(req);
+        std::string modeloId;
+        {
+            std::lock_guard trava(mutexMotor);
+            if (estadoMotor != EstadoMotor::Pronto) throw ErroHttp(503, "O motor ainda não está pronto.");
+            modeloId = modeloAtivo;
+        }
+        const json& modelo = *acharModelo(modeloId);
+        json pedido = montarPedido(corpo, modelo);
+        pedido["modelo"] = modelo["nome"];
         json trabalho = chamarMotor("POST", "/sdcpp/v1/img_gen", paraMotor(pedido));
         std::string id = trabalho["id"].get<std::string>();
         {
             std::lock_guard trava(mutexPedidos);
             pedidos[id] = pedido;
         }
-        responderJson(res, 202, {{"id", id}});
+        responderJson(res, 202, {{"id", id}, {"prompt", pedido["prompt"]}, {"traduzido", pedido["traduzido"]}});
     });
 
     servidor.Get(R"(/api/trabalhos/([^/]+))", [](const httplib::Request& req, httplib::Response& res) {
@@ -503,7 +749,7 @@ static void configurarRotas(httplib::Server& servidor) {
 
     servidor.set_exception_handler([](const httplib::Request&, httplib::Response& res, std::exception_ptr ep) {
         int status = 500;
-        std::string mensagem = "Erro interno no gerador.";
+        std::string mensagem = "Erro interno no NidraIA.";
         try {
             std::rethrow_exception(ep);
         } catch (const ErroHttp& erro) {
@@ -521,15 +767,15 @@ static httplib::Server* servidorAtivo = nullptr;
 
 static BOOL WINAPI aoFecharConsole(DWORD) {
     if (servidorAtivo) servidorAtivo->stop();
-    if (processoMotor) TerminateProcess(processoMotor, 0);
+    if (jobFilhos) TerminateJobObject(jobFilhos, 0);
     return TRUE;
 }
 
 int main(int argc, char** argv) {
     SetConsoleOutputCP(CP_UTF8);
+    SetConsoleTitleW(L"NidraIA");
     // --sem-navegador: não abre o navegador sozinho (útil para testes)
     bool abrirNavegador = !(argc > 1 && std::string(argv[1]) == "--sem-navegador");
-    SetConsoleTitleW(L"Gerador de Imagens");
 
     pastas.raiz = pastaDoExecutavel();
     pastas.motor = pastas.raiz / "motor";
@@ -538,13 +784,17 @@ int main(int argc, char** argv) {
     pastas.publico = pastas.raiz / "public";
     fs::create_directories(pastas.galeria);
 
-    std::ifstream arquivoConfig(pastas.raiz / "config.json");
-    config = json::parse(arquivoConfig, nullptr, false);
-    if (config.is_discarded()) {
+    {
+        // Lê e já fecha o arquivo, para ele poder ser editado com o programa aberto
+        std::ifstream arquivoConfig(pastas.raiz / "config.json");
+        config = json::parse(arquivoConfig, nullptr, false);
+    }
+    if (config.is_discarded() || !config.contains("modelos")) {
         std::cerr << "Não consegui ler o config.json em " << u8(pastas.raiz) << "\n";
         system("pause");
         return 1;
     }
+    prepararJob();
 
     httplib::Server servidor;
     servidorAtivo = &servidor;
@@ -553,19 +803,30 @@ int main(int argc, char** argv) {
 
     int porta = config["portaApp"].get<int>();
     if (!servidor.bind_to_port("127.0.0.1", porta)) {
-        std::cerr << "A porta " << porta << " já está em uso. O gerador já está aberto em outra janela?\n";
+        std::cerr << "A porta " << porta << " já está em uso. O NidraIA já está aberto em outra janela?\n";
         system("pause");
         return 1;
     }
 
     std::string endereco = std::format("http://localhost:{}", porta);
-    std::cout << "Gerador de Imagens aberto em " << endereco << "\n"
+    std::cout << "NidraIA " << VERSAO << " aberto em " << endereco << "\n"
               << "Para fechar, feche esta janela.\n\n";
 
-    if (ligarMotor()) std::thread(esperarMotor).detach();
-    if (abrirNavegador) ShellExecuteA(nullptr, "open", endereco.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    // Liga o último modelo usado; se ele não estiver baixado, tenta os outros
+    std::vector<std::string> tentativas{modeloInicial()};
+    for (const auto& modelo : config["modelos"]) tentativas.push_back(modelo["id"]);
+    for (const auto& id : tentativas) {
+        try {
+            ligarMotor(id);
+            break;
+        } catch (const ErroHttp& erro) {
+            registrar(std::string("[nidraia] ") + erro.what());
+        }
+    }
 
+    std::thread(desligarTradutorOcioso).detach();
+    if (abrirNavegador) ShellExecuteA(nullptr, "open", endereco.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     servidor.listen_after_bind();
-    if (processoMotor) TerminateProcess(processoMotor, 0);
+    TerminateJobObject(jobFilhos, 0);
     return 0;
 }

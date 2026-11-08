@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerador de Imagens</title>
+    <title>NidraIA</title>
     <link rel="icon" href="icone.svg" type="image/svg+xml">
     <link rel="stylesheet" href="style.css">
     <script src="app.js" type="module" defer></script>
@@ -12,7 +12,7 @@
 
 <body>
     <header class="topo">
-        <h1 class="marca"><img src="icone.svg" alt="" width="28" height="28"> Gerador de Imagens</h1>
+        <h1 class="marca"><img src="icone.svg" alt="" width="28" height="28"> NidraIA <span id="versao" class="versao"></span></h1>
         <button type="button" id="estado" class="estado" data-estado="carregando" aria-expanded="false" aria-controls="log">
             <span class="luz" aria-hidden="true"></span>
             <span id="estado-texto">Ligando o motor...</span>
@@ -25,9 +25,20 @@
         <!-- Painel de configurações -->
         <form id="form" class="painel" novalidate>
             <label class="campo">
+                <span>Modelo</span>
+                <select id="modelo" aria-describedby="modelo-desc"></select>
+                <small id="modelo-desc"></small>
+            </label>
+
+            <label class="campo">
                 <span>O que você quer ver?</span>
                 <textarea id="prompt" rows="5" maxlength="2000" required
                     placeholder="Ex.: um gato astronauta flutuando no espaço, arte digital, cores vibrantes"></textarea>
+            </label>
+
+            <label class="opcao-check" id="traduzir-opcao">
+                <input type="checkbox" id="traduzir" checked>
+                <span>Traduzir para inglês antes de gerar <em>(o modelo entende inglês melhor)</em></span>
             </label>
 
             <details class="extra">
@@ -88,6 +99,7 @@
             <div id="atual" class="atual" hidden>
                 <div class="atual-topo">
                     <p id="atual-status">Na fila...</p>
+                    <p id="atual-traducao" class="traducao" hidden></p>
                     <div class="barra" aria-hidden="true"><span id="barra"></span></div>
                 </div>
                 <div id="atual-imagens" class="grade-atual"></div>
@@ -109,6 +121,7 @@
                 <button type="button" class="fechar" id="vis-fechar" aria-label="Fechar">✕</button>
                 <h3>Prompt</h3>
                 <p id="vis-prompt" class="vis-prompt"></p>
+                <p id="vis-original" class="traducao" hidden></p>
                 <dl id="vis-dados" class="vis-dados"></dl>
                 <div class="vis-acoes">
                     <button type="button" class="botao" id="vis-reusar">Reutilizar configurações</button>

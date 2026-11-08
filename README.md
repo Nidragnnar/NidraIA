@@ -1,97 +1,94 @@
-# Gerador de Imagens
+# NidraIA
 
-Gerador de imagens com IA que roda **no seu próprio computador**, de graça e sem internet (depois de baixar o modelo). Usa o motor aberto [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) com **Vulkan**, que funciona em placas **AMD, NVIDIA e Intel**, e um programa próprio em **C++** com interface em português.
+Gerador de imagens com IA que roda **no seu próprio computador**, de graça e sem internet (depois de baixar os modelos). Usa o motor aberto [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) com **Vulkan**, que funciona em placas **AMD, NVIDIA e Intel**, e um programa próprio em **C++** com interface em português.
 
 ## Recursos
 
-- Escreva o que quer ver e gere de 1 a 4 imagens por vez
-- Prévia da imagem enquanto ela é gerada, com barra de progresso e botão de cancelar
+- Dois modelos, com troca pela própria interface:
+  - **SDXL Turbo**: o mais rápido (cerca de 5 s por imagem)
+  - **FLUX.1 schnell**: mais qualidade e entende melhor o prompt, mais lento
+- **Tradução automática do prompt para inglês**, feita no próprio PC pelo [llama.cpp](https://github.com/ggml-org/llama.cpp) (os modelos entendem inglês muito melhor)
+- 1 a 4 imagens por vez, com prévia, barra de progresso e botão de cancelar
 - Formatos quadrado, retrato, paisagem e grande
-- Semente (seed) salva em cada imagem: use **Reutilizar configurações** para repetir ou variar uma imagem
-- Galeria com todas as imagens, salvas na pasta `galeria/` junto de um arquivo `.json` com o prompt e as configurações
-- Visualizador com download e opção de apagar
-- Log do motor na tela (clique no indicador de status no topo)
+- Semente (seed) salva em cada imagem: **Reutilizar configurações** repete ou varia uma imagem
+- Galeria salva na pasta `galeria/`, com um `.json` ao lado de cada imagem (prompt original, prompt em inglês e configurações)
+- Log do motor e do tradutor na tela (clique no indicador de status no topo)
 
-## Como usar
+## Para usar (sem programar)
 
-1. Dê dois cliques em **`GeradorImagens.exe`**.
-2. O navegador abre em http://localhost:3333. Espere o indicador ficar verde (**Pronto**) e gere.
+Baixe o `.zip` da [última Release](https://github.com/Nidragnnar/NidraIA/releases), extraia e siga o `LEIA-ME.txt`:
 
-Para fechar, feche a janela preta. O motor fecha junto.
-
-Não precisa instalar nada além do driver da placa de vídeo atualizado.
+1. Dois cliques em **`Instalar componentes.bat`**: baixa o motor e os modelos, conferindo cada arquivo pelo SHA-256.
+2. Dois cliques em **`NidraIA.exe`**: o navegador abre em http://localhost:3333.
 
 ## Estrutura
 
 ```
-GeradorImagens/
-├── GeradorImagens.exe    # o programa (gerado pela compilação)
-├── config.json           # portas, modelo e configurações padrão
-├── src/gerador.cpp       # servidor: liga o motor, serve a interface e salva a galeria
-├── public/               # interface (HTML, CSS e JavaScript)
-├── third_party/          # cpp-httplib e nlohmann/json (só cabeçalhos)
-├── CMakeLists.txt        # receita de compilação
-├── compilar.bat          # compila com o Visual Studio
-├── motor/                # stable-diffusion.cpp (não vai para o Git)
-├── modelos/              # arquivos .safetensors (não vão para o Git)
-└── galeria/              # imagens geradas (não vão para o Git)
+NidraIA/
+├── NidraIA.exe                # o programa (gerado pela compilação)
+├── config.json                # portas, modelos e configurações padrão
+├── Instalar componentes.bat   # instalador dos componentes
+├── instalador/                # script do instalador e LEIA-ME para a Release
+├── src/nidraia.cpp            # servidor: liga motor e tradutor, serve a interface e salva a galeria
+├── public/                    # interface (HTML, CSS e JavaScript)
+├── third_party/               # cpp-httplib e nlohmann/json (só cabeçalhos)
+├── CMakeLists.txt             # receita de compilação
+├── compilar.bat               # compila com o Visual Studio
+├── empacotar.ps1              # monta o .zip da Release em dist/
+├── motor/                     # stable-diffusion.cpp (não vai para o Git)
+├── modelos/                   # modelos de imagem (não vão para o Git)
+├── tradutor/                  # llama.cpp + modelo de tradução (não vão para o Git)
+└── galeria/                   # imagens geradas (não vão para o Git)
 ```
 
 ## Compilar
 
 Precisa do **Visual Studio 2026** com a carga de trabalho **Desenvolvimento para desktop com C++** (já inclui o CMake).
 
-Dê dois cliques em `compilar.bat`, ou rode:
-
 ```bash
 cmake -S . -B build -G "Visual Studio 18 2026" -A x64
 cmake --build build --config Release
 ```
 
-O `GeradorImagens.exe` é copiado para a raiz do projeto. A biblioteca do Visual C++ vai embutida no `.exe`, então ele roda em outros computadores sem instalar nada.
+Ou dois cliques em `compilar.bat`. O `NidraIA.exe` é copiado para a raiz do projeto, com a biblioteca do Visual C++ embutida.
 
-Para testes, `GeradorImagens.exe --sem-navegador` não abre o navegador sozinho.
+Para testes, `NidraIA.exe --sem-navegador` não abre o navegador sozinho.
 
-## Instalar o motor e o modelo
+Para montar a Release: `powershell -ExecutionPolicy Bypass -File empacotar.ps1` (gera `dist/NidraIA-v<versão>.zip`).
 
-As pastas `motor/` e `modelos/` não estão no repositório porque são grandes.
+## Componentes
 
-**Motor:** baixe o arquivo `...-bin-win-vulkan-x64.zip` em [releases do stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp/releases) e extraia o conteúdo dentro de `motor/`. Testado com a versão `master-1062-b43af40`.
+O `instalador/instalar.ps1` tem a lista completa, com links e hashes. Resumo:
 
-**Modelo:** baixe [`sd_xl_turbo_1.0_fp16.safetensors`](https://huggingface.co/stabilityai/sdxl-turbo) (6,6 GB) e coloque em `modelos/`.
+| Componente | Tamanho | Licença |
+| --- | --- | --- |
+| stable-diffusion.cpp `master-1062-b43af40` (Vulkan) | 29 MB | MIT |
+| SDXL Turbo fp16 | 6,6 GB | Stability AI, **uso não comercial** |
+| FLUX.1 schnell Q4_0 + T5 Q4_K_M + CLIP-L + VAE | 9,9 GB | Apache 2.0 |
+| llama.cpp `b12208` (Vulkan) | 36 MB | MIT |
+| Qwen3-4B-Instruct-2507 Q4_K_M (tradutor) | 2,4 GB | Apache 2.0 |
 
-Para usar outro modelo, coloque o arquivo em `modelos/` e troque o nome em `config.json` (campo `modelo`), ajustando também os `padroes` (passos e CFG) recomendados para ele.
+Para adicionar outro modelo, coloque os arquivos em `modelos/` e acrescente uma entrada em `modelos` no `config.json`. Cada chave de `arquivos` vira uma opção do motor (`model` → `-m`, `vae` → `--vae`, `diffusion-model` → `--diffusion-model`...).
 
-## Configurações do SDXL Turbo
-
-| Configuração | Valor recomendado |
-| --- | --- |
-| Tamanho | 512 × 512 (o modelo foi treinado nesse tamanho) |
-| Passos | 1 a 4 |
-| CFG | 1 (desativado) |
-
-O SDXL Turbo tem licença da Stability AI para **uso não comercial**.
-
-## Desempenho medido (AMD Radeon RX 7600, 8 GB)
+## Desempenho medido (AMD Radeon RX 7600, 8 GB, Ryzen 5 5600G, 16 GB de RAM)
 
 | Situação | Tempo |
 | --- | --- |
-| 1 imagem 512 × 512, 4 passos | cerca de 5,5 s |
-| 2 imagens 512 × 512 (primeira geração depois de abrir) | cerca de 15 a 18 s |
+| SDXL Turbo, 1 imagem 512 × 512, 4 passos | cerca de 5,5 s |
+| SDXL Turbo, 1 imagem 1024 × 1024 | cerca de 11 s |
+| SDXL Turbo, 4 imagens 512 × 512 | cerca de 21 s |
+| FLUX.1 schnell, 1 imagem 512 × 512, 4 passos | 35 a 42 s |
+| FLUX.1 schnell, 1 imagem 1024 × 1024 | cerca de 61 s |
+| Tradução do prompt (Qwen3 4B, no processador) | 1 a 2,5 s (a primeira, que liga o tradutor, 3 a 4 s) |
+| Trocar de modelo | o motor reinicia em cerca de 1 s; o primeiro uso carrega o modelo |
 
-O modelo ocupa cerca de 4,9 GB de memória de vídeo; o codificador de texto e o VAE ficam na memória RAM.
+O tradutor ocupa cerca de 2,5 GB de RAM e se desliga sozinho depois de 5 minutos sem uso (`desligarAposMinutos` no `config.json`).
 
 ## Como funciona
 
-1. O `GeradorImagens.exe` liga o `sd-server.exe` do stable-diffusion.cpp em segundo plano, só para este computador (`127.0.0.1`).
-2. A interface envia o pedido para o `GeradorImagens.exe`, que repassa ao motor e consulta o andamento a cada 0,4 s.
-3. Quando a imagem fica pronta, o programa salva o PNG e as configurações na pasta `galeria/` do dia.
+1. O `NidraIA.exe` liga o `sd-server.exe` (motor) com o modelo escolhido, só para este computador (`127.0.0.1`). Trocar de modelo reinicia o motor com os arquivos do outro modelo.
+2. Com a tradução ligada, o prompt passa antes pelo `llama-server.exe`, que roda no processador para não disputar a placa de vídeo com o motor.
+3. A interface acompanha a geração e, no fim, o programa salva o PNG e as configurações na pasta `galeria/` do dia.
+4. Se o `NidraIA.exe` fechar, o Windows encerra o motor e o tradutor junto.
 
-Tudo acontece no seu computador: nenhum prompt ou imagem é enviado para a internet.
-
-## Licenças de terceiros
-
-- [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp): MIT
-- [cpp-httplib](https://github.com/yhirose/cpp-httplib): MIT
-- [nlohmann/json](https://github.com/nlohmann/json): MIT
-- SDXL Turbo: licença da Stability AI (uso não comercial)
+Nenhum prompt ou imagem é enviado para a internet.
