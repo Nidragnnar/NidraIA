@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Imagens</title>
+    <link rel="icon" href="icone.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" type="module" defer></script>
+</head>
+
+<body>
+    <header class="topo">
+        <h1 class="marca"><img src="icone.svg" alt="" width="28" height="28"> Gerador de Imagens</h1>
+        <button type="button" id="estado" class="estado" data-estado="carregando" aria-expanded="false" aria-controls="log">
+            <span class="luz" aria-hidden="true"></span>
+            <span id="estado-texto">Ligando o motor...</span>
+        </button>
+    </header>
+
+    <pre id="log" class="log" hidden></pre>
+
+    <main class="layout">
+        <!-- Painel de configurações -->
+        <form id="form" class="painel" novalidate>
+            <label class="campo">
+                <span>O que você quer ver?</span>
+                <textarea id="prompt" rows="5" maxlength="2000" required
+                    placeholder="Ex.: um gato astronauta flutuando no espaço, arte digital, cores vibrantes"></textarea>
+            </label>
+
+            <details class="extra">
+                <summary>O que evitar <em>(opcional)</em></summary>
+                <textarea id="negativo" rows="2" maxlength="2000" placeholder="Ex.: borrado, texto, marca d'água"></textarea>
+            </details>
+
+            <fieldset class="campo">
+                <legend>Formato</legend>
+                <div class="formatos" id="formatos">
+                    <label><input type="radio" name="formato" value="512x512" checked><span><i class="q11"></i>Quadrado</span></label>
+                    <label><input type="radio" name="formato" value="512x768"><span><i class="q23"></i>Retrato</span></label>
+                    <label><input type="radio" name="formato" value="768x512"><span><i class="q32"></i>Paisagem</span></label>
+                    <label><input type="radio" name="formato" value="1024x1024"><span><i class="q11 grande"></i>Grande</span></label>
+                </div>
+            </fieldset>
+
+            <div class="duas">
+                <label class="campo">
+                    <span>Quantidade</span>
+                    <select id="quantidade">
+                        <option value="1">1 imagem</option>
+                        <option value="2">2 imagens</option>
+                        <option value="3">3 imagens</option>
+                        <option value="4">4 imagens</option>
+                    </select>
+                </label>
+                <label class="campo">
+                    <span>Semente <em title="Use o mesmo número para repetir uma imagem">(?)</em></span>
+                    <input id="seed" type="text" inputmode="numeric" placeholder="Aleatória">
+                </label>
+            </div>
+
+            <details class="extra">
+                <summary>Avançado</summary>
+                <label class="campo">
+                    <span>Passos <output id="passos-valor"></output></span>
+                    <input id="passos" type="range" min="1" max="12" step="1">
+                    <small>O SDXL Turbo funciona melhor com 1 a 4 passos.</small>
+                </label>
+                <label class="campo">
+                    <span>Força do prompt (CFG) <output id="cfg-valor"></output></span>
+                    <input id="cfg" type="range" min="1" max="10" step="0.5">
+                    <small>No SDXL Turbo, deixe em 1.</small>
+                </label>
+            </details>
+
+            <p id="erro-form" class="erro" role="alert" hidden></p>
+
+            <div class="acoes">
+                <button id="gerar" class="botao" type="submit" disabled>Gerar <kbd>Ctrl + Enter</kbd></button>
+                <button id="cancelar" class="botao botao-secundario" type="button" hidden>Cancelar</button>
+            </div>
+        </form>
+
+        <!-- Resultado atual e galeria -->
+        <section class="resultados">
+            <div id="atual" class="atual" hidden>
+                <div class="atual-topo">
+                    <p id="atual-status">Na fila...</p>
+                    <div class="barra" aria-hidden="true"><span id="barra"></span></div>
+                </div>
+                <div id="atual-imagens" class="grade-atual"></div>
+            </div>
+
+            <div class="galeria-topo">
+                <h2>Galeria <span id="galeria-total" class="suave"></span></h2>
+            </div>
+            <p id="galeria-vazia" class="vazio" hidden>As imagens que você gerar aparecem aqui e ficam salvas na pasta <code>galeria</code>.</p>
+            <div id="galeria" class="galeria"></div>
+        </section>
+    </main>
+
+    <!-- Visualizador -->
+    <dialog id="visualizador" class="visualizador">
+        <div class="vis-conteudo">
+            <img id="vis-imagem" alt="">
+            <aside class="vis-info">
+                <button type="button" class="fechar" id="vis-fechar" aria-label="Fechar">✕</button>
+                <h3>Prompt</h3>
+                <p id="vis-prompt" class="vis-prompt"></p>
+                <dl id="vis-dados" class="vis-dados"></dl>
+                <div class="vis-acoes">
+                    <button type="button" class="botao" id="vis-reusar">Reutilizar configurações</button>
+                    <a class="botao botao-secundario" id="vis-baixar" download>Baixar</a>
+                    <button type="button" class="botao botao-perigo" id="vis-apagar">Apagar</button>
+                </div>
+            </aside>
+        </div>
+    </dialog>
+
+    <p id="toast" class="toast" role="status"></p>
+</body>
+
+</html>

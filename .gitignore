@@ -1,0 +1,6 @@
+# Arquivos grandes, gerados ou compilados (não vão para o Git)
+motor/
+modelos/
+galeria/
+build/
+GeradorImagens.exe

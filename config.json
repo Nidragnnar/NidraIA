@@ -1,0 +1,12 @@
+{
+    "portaApp": 3333,
+    "portaMotor": 1234,
+    "modelo": "sd_xl_turbo_1.0_fp16.safetensors",
+    "padroes": {
+        "largura": 512,
+        "altura": 512,
+        "passos": 4,
+        "cfg": 1.0,
+        "amostrador": "euler_a"
+    }
+}
