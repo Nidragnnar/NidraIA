@@ -58,6 +58,28 @@
                 <button type="button" class="link" id="conferencia-fechar">Voltar e mudar o texto em português</button>
             </section>
 
+            <fieldset class="campo">
+                <legend>Estilo</legend>
+                <div class="estilos" id="estilos"></div>
+            </fieldset>
+
+            <fieldset class="campo">
+                <legend>Partir de uma imagem sua <em>(opcional)</em></legend>
+                <label class="envio" id="envio">
+                    <input type="file" id="arquivo" accept="image/png,image/jpeg,image/webp">
+                    <span id="envio-texto">Clique ou arraste uma foto ou desenho aqui</span>
+                    <img id="envio-previa" alt="Imagem escolhida" hidden>
+                </label>
+                <div id="envio-opcoes" class="envio-opcoes" hidden>
+                    <label class="campo">
+                        <span>Quanto a IA pode mudar <output id="forca-valor"></output></span>
+                        <input id="forca" type="range" min="0.2" max="0.95" step="0.05" value="0.6">
+                        <small>Pouco mantém a sua imagem; muito usa ela só como ponto de partida. Descreva no prompt o que aparece nela (ex.: "um dragão dourado voando à noite").</small>
+                    </label>
+                    <button type="button" class="link" id="envio-remover">Remover imagem</button>
+                </div>
+            </fieldset>
+
             <details class="extra">
                 <summary>O que evitar <em>(opcional)</em></summary>
                 <textarea id="negativo" rows="2" maxlength="2000" placeholder="Ex.: borrado, texto, marca d'água"></textarea>

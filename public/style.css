@@ -692,3 +692,84 @@ select:disabled {
 .aumentar select {
     min-width: 0;
 }
+
+/* ========== NidraIA 0.4: estilos e imagem enviada ========== */
+.estilos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.estilos input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.estilos span {
+    display: inline-block;
+    padding: 6px 12px;
+    border: 1.5px solid var(--cor-borda);
+    border-radius: 999px;
+    background: var(--cor-campo);
+    color: var(--cor-texto-suave);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.estilos input:checked + span {
+    border-color: var(--cor-destaque);
+    color: var(--cor-texto);
+    background: color-mix(in srgb, var(--cor-destaque) 12%, var(--cor-campo));
+}
+
+.estilos input:focus-visible + span {
+    outline: 3px solid var(--cor-destaque);
+    outline-offset: 2px;
+}
+
+.envio {
+    position: relative;
+    display: grid;
+    place-items: center;
+    gap: 8px;
+    min-height: 84px;
+    padding: 12px;
+    border: 2px dashed var(--cor-borda);
+    border-radius: 12px;
+    background: var(--cor-campo);
+    color: var(--cor-texto-suave);
+    font-size: 0.85rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.envio:hover,
+.envio.arrastando {
+    border-color: var(--cor-destaque);
+}
+
+.envio input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.envio img {
+    max-width: 100%;
+    max-height: 140px;
+    border-radius: 8px;
+}
+
+.envio span {
+    overflow-wrap: anywhere;
+}
+
+.envio-opcoes {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+}

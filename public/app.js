@@ -18,6 +18,15 @@ const el = {
     promptEn: $("#prompt-en"),
     negativoEn: $("#negativo-en"),
     negativoEnCampo: $("#negativo-en-campo"),
+    estilos: $("#estilos"),
+    arquivo: $("#arquivo"),
+    envio: $("#envio"),
+    envioTexto: $("#envio-texto"),
+    envioPrevia: $("#envio-previa"),
+    envioOpcoes: $("#envio-opcoes"),
+    envioRemover: $("#envio-remover"),
+    forca: $("#forca"),
+    forcaValor: $("#forca-valor"),
     visAumentarGrupo: $("#vis-aumentar-grupo"),
     visAumentar: $("#vis-aumentar"),
     visUpscaler: $("#vis-upscaler"),
@@ -100,6 +109,7 @@ async function acompanharMotor() {
             el.traduzirOpcao.hidden = !estado.tradutor;
             atualizarRotuloGerar();
             if (!upscalers.length) montarUpscalers(estado.upscalers || []);
+            if (!el.estilos.children.length) montarEstilos(estado.estilos || []);
             if (estado.modelo !== modeloAtivo || !modelos.length) {
                 modelos = estado.modelos;
                 modeloAtivo = estado.modelo;
@@ -185,6 +195,105 @@ el.estado.addEventListener("click", () => {
     el.estado.setAttribute("aria-expanded", String(!el.log.hidden));
 });
 
+// ========== Estilos prontos ==========
+const CHAVE_ESTILO = "nidraia.estilo";
+
+function lerPreferencia(chave) {
+    try {
+        return localStorage.getItem(chave);
+    } catch {
+        return null;
+    }
+}
+
+function montarEstilos(lista) {
+    const salvo = lerPreferencia(CHAVE_ESTILO) || "nenhum";
+    el.estilos.replaceChildren(
+        ...lista.map((estilo) => {
+            const rotulo = document.createElement("label");
+            const radio = document.createElement("input");
+            radio.type = "radio";
+            radio.name = "estilo";
+            radio.value = estilo.id;
+            radio.checked = estilo.id === salvo;
+            radio.addEventListener("change", () => {
+                try {
+                    localStorage.setItem(CHAVE_ESTILO, estilo.id);
+                } catch {
+                    // sem armazenamento: só não lembra a escolha
+                }
+            });
+            const nome = document.createElement("span");
+            nome.textContent = estilo.nome;
+            rotulo.append(radio, nome);
+            return rotulo;
+        })
+    );
+    if (!el.form.querySelector("input[name=estilo]:checked")) el.form.querySelector("input[name=estilo]")?.click();
+}
+
+const estiloEscolhido = () => el.form.querySelector("input[name=estilo]:checked")?.value || "nenhum";
+
+// ========== Partir de uma imagem sua ==========
+// A imagem é recortada e redimensionada no navegador para o formato escolhido (sem distorcer)
+let imagemOriginal = null;
+
+function prepararImagemBase() {
+    if (!imagemOriginal) return null;
+    const { largura, altura } = formatoEscolhido();
+    const canvas = document.createElement("canvas");
+    canvas.width = largura;
+    canvas.height = altura;
+    const escala = Math.max(largura / imagemOriginal.width, altura / imagemOriginal.height);
+    const w = imagemOriginal.width * escala;
+    const h = imagemOriginal.height * escala;
+    canvas.getContext("2d").drawImage(imagemOriginal, (largura - w) / 2, (altura - h) / 2, w, h);
+    return canvas.toDataURL("image/png");
+}
+
+function carregarArquivo(arquivo) {
+    if (!arquivo || !/^image\/(png|jpeg|webp)$/.test(arquivo.type)) {
+        avisar("Escolha uma imagem PNG, JPG ou WebP.");
+        return;
+    }
+    const url = URL.createObjectURL(arquivo);
+    const img = new Image();
+    img.onload = () => {
+        imagemOriginal = img;
+        el.envioPrevia.src = url;
+        el.envioPrevia.hidden = false;
+        el.envioTexto.textContent = arquivo.name;
+        el.envioOpcoes.hidden = false;
+    };
+    img.onerror = () => avisar("Não consegui abrir essa imagem.");
+    img.src = url;
+}
+
+function removerImagem() {
+    imagemOriginal = null;
+    el.arquivo.value = "";
+    el.envioPrevia.hidden = true;
+    el.envioPrevia.removeAttribute("src");
+    el.envioTexto.textContent = "Clique ou arraste uma foto ou desenho aqui";
+    el.envioOpcoes.hidden = true;
+}
+
+el.arquivo.addEventListener("change", () => carregarArquivo(el.arquivo.files[0]));
+el.envioRemover.addEventListener("click", removerImagem);
+el.forca.addEventListener("input", () => (el.forcaValor.textContent = `${Math.round(el.forca.value * 100)}%`));
+el.forcaValor.textContent = `${Math.round(el.forca.value * 100)}%`;
+for (const tipo of ["dragenter", "dragover"]) {
+    el.envio.addEventListener(tipo, (evento) => {
+        evento.preventDefault();
+        el.envio.classList.add("arrastando");
+    });
+}
+for (const tipo of ["dragleave", "drop"]) el.envio.addEventListener(tipo, () => el.envio.classList.remove("arrastando"));
+el.envio.addEventListener("drop", (evento) => {
+    evento.preventDefault();
+    carregarArquivo(evento.dataTransfer.files[0]);
+});
+
 // ========== Tradução para conferir ==========
 const traduzirAtivo = () => !el.traduzirOpcao.hidden && el.traduzir.checked;
 const precisaConferir = () => traduzirAtivo() && el.conferir.checked && el.conferencia.hidden;
@@ -253,7 +362,10 @@ async function gerar() {
         passos: Number(el.passos.value),
         cfg: Number(el.cfg.value),
         traduzir: traduzirAtivo(),
+        estilo: estiloEscolhido(),
     };
+    const imagemBase = prepararImagemBase();
+    if (imagemBase) Object.assign(pedido, { imagemBase, forca: Number(el.forca.value) });
     // Tradução já conferida: manda o inglês (talvez corrigido) e guarda o português junto
     if (traduzirAtivo() && !el.conferencia.hidden) {
         Object.assign(pedido, {
@@ -423,6 +535,8 @@ function abrir(item) {
         ["CFG", item.cfg],
         ["Tempo", `${item.segundos.toFixed(1)} s`],
         ["Modelo", item.modelo.replace(/\.safetensors$/, "")],
+        ...(item.estiloNome ? [["Estilo", item.estiloNome]] : []),
+        ...(item.partiuDeImagem ? [["Partiu de", `uma imagem sua (a IA pôde mudar ${Math.round(item.forca * 100)}%)`]] : []),
         ...(item.variacaoDe ? [["Variação", `de outra imagem (força ${item.forca})`]] : []),
         ...(item.aumentadaDe ? [["Aumentada", `4× com ${upscalers.find((u) => u.id === item.upscaler)?.nome || item.upscaler}`]] : []),
         ["Criada em", new Date(item.criadoEm).toLocaleString("pt-BR")],
@@ -447,8 +561,10 @@ el.vis.addEventListener("click", (evento) => {
 
 $("#vis-reusar").addEventListener("click", () => {
     const item = abertoNoVisualizador;
-    // Usa o prompt em inglês que gerou a imagem e desliga a tradução, para repetir exatamente
-    el.prompt.value = item.prompt;
+    // Usa o prompt em inglês que gerou a imagem (sem os termos do estilo) e desliga a tradução, para repetir exatamente
+    el.prompt.value = item.promptBase || item.prompt;
+    const radioEstilo = el.form.querySelector(`input[name=estilo][value="${item.estilo || "nenhum"}"]`);
+    if (radioEstilo) radioEstilo.checked = true;
     el.negativo.value = item.negativo || "";
     el.traduzir.checked = false;
     fecharConferencia();

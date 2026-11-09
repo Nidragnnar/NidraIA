@@ -1,0 +1,34 @@
+// Recursos do NidraIA.exe: ícone e informações de versão (aparecem em Propriedades → Detalhes)
+// NIDRAIA_VERSAO e NIDRAIA_VERSAO_NUM vêm do CMakeLists.txt
+#include <winver.h>
+
+1 ICON "nidraia.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION NIDRAIA_VERSAO_NUM
+PRODUCTVERSION NIDRAIA_VERSAO_NUM
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041604b0"
+        BEGIN
+            VALUE "CompanyName", "Nidragnnar"
+            VALUE "FileDescription", "NidraIA - gerador de imagens com IA"
+            VALUE "FileVersion", NIDRAIA_VERSAO
+            VALUE "InternalName", "NidraIA"
+            VALUE "LegalCopyright", "Nidragnnar"
+            VALUE "OriginalFilename", "NidraIA.exe"
+            VALUE "ProductName", "NidraIA"
+            VALUE "ProductVersion", NIDRAIA_VERSAO
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x416, 1200
+    END
+END

@@ -30,7 +30,7 @@ using json = nlohmann::json;
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
 
-static constexpr const char* VERSAO = "0.3.0";
+static constexpr const char* VERSAO = NIDRAIA_VERSAO;  // definida no CMakeLists.txt
 
 // ========== Caminhos e configuração ==========
 struct Pastas {
@@ -445,6 +445,23 @@ static int64_t sementeOuSorteio(const json& corpo) {
     return std::uniform_int_distribution<int64_t>(0, (1LL << 31) - 1)(gerador);
 }
 
+// Estilo pronto do config.json: acrescenta termos em inglês ao prompt e ao "evitar".
+// O prompt sem o estilo fica guardado em "promptBase", para "Reutilizar" não repetir os termos.
+static void aplicarEstilo(json& pedido, const std::string& id) {
+    if (id.empty() || id == "nenhum" || !config.contains("estilos")) return;
+    for (const auto& estilo : config["estilos"]) {
+        if (estilo["id"] != id) continue;
+        auto juntar = [](const std::string& a, const std::string& b) { return a.empty() ? b : b.empty() ? a : a + ", " + b; };
+        pedido["promptBase"] = pedido["prompt"];
+        pedido["prompt"] = juntar(pedido["prompt"].get<std::string>(), estilo["sufixo"].get<std::string>());
+        pedido["negativo"] = juntar(pedido["negativo"].get<std::string>(), estilo["negativo"].get<std::string>());
+        pedido["estilo"] = estilo["id"];
+        pedido["estiloNome"] = estilo["nome"];
+        return;
+    }
+    throw ErroHttp(422, "Estilo desconhecido.");
+}
+
 static json montarPedido(const json& corpo, const json& modelo) {
     const auto& p = modelo["padroes"];
     std::string prompt = texto(corpo, "prompt");
@@ -480,6 +497,7 @@ static json montarPedido(const json& corpo, const json& modelo) {
         pedido["promptOriginal"] = original.substr(0, 4000);
         pedido["traduzido"] = true;
     }
+    aplicarEstilo(pedido, texto(corpo, "estilo"));
     return pedido;
 }
 
@@ -622,8 +640,9 @@ static void responderJson(httplib::Response& res, int status, const json& dados)
     res.set_content(dados.dump(), "application/json; charset=utf-8");
 }
 
-static json lerCorpo(const httplib::Request& req) {
-    if (req.body.size() > 100'000) throw ErroHttp(413, "Pedido grande demais.");
+// limite: quase todo pedido é texto pequeno; só o "gerar" com uma imagem enviada pela tela é maior
+static json lerCorpo(const httplib::Request& req, size_t limite = 100'000) {
+    if (req.body.size() > limite) throw ErroHttp(413, "Pedido grande demais.");
     json corpo = json::parse(req.body.empty() ? "{}" : req.body, nullptr, false);
     if (corpo.is_discarded() || !corpo.is_object()) throw ErroHttp(400, "JSON inválido.");
     return corpo;
@@ -714,6 +733,8 @@ static void configurarRotas(httplib::Server& servidor) {
         estado["modelos"] = listaModelos();
         estado["tradutor"] = tradutorDisponivel();
         estado["upscalers"] = listaUpscalers();
+        estado["estilos"] = json::array();
+        for (const auto& e : config.value("estilos", json::array())) estado["estilos"].push_back({{"id", e["id"]}, {"nome", e["nome"]}});
         estado["log"] = ultimasLinhas(60);
         responderJson(res, 200, estado);
     });
@@ -733,11 +754,24 @@ static void configurarRotas(httplib::Server& servidor) {
     });
 
     servidor.Post("/api/gerar", [](const httplib::Request& req, httplib::Response& res) {
-        json corpo = lerCorpo(req);
+        json corpo = lerCorpo(req, 25'000'000);
         const json& modelo = modeloProntoOuErro();
+
+        // Imagem enviada pela tela (opcional): "data:image/png;base64,..." já no tamanho escolhido
+        std::string imagemBase;
+        if (corpo.contains("imagemBase") && corpo["imagemBase"].is_string()) {
+            imagemBase = corpo["imagemBase"].get<std::string>();
+            if (!imagemBase.starts_with("data:image/png;base64,") && !imagemBase.starts_with("data:image/jpeg;base64,"))
+                throw ErroHttp(422, "A imagem enviada precisa ser PNG ou JPG.");
+        }
         json pedido = montarPedido(corpo, modelo);
         pedido["modelo"] = modelo["nome"];
-        std::string id = enfileirar(pedido, paraMotor(pedido));
+        double forca = numero(corpo, "forca", 0.1, 1.0, 0.6);
+        if (!imagemBase.empty()) {
+            pedido["partiuDeImagem"] = true;
+            pedido["forca"] = forca;
+        }
+        std::string id = enfileirar(pedido, paraMotor(pedido, imagemBase, forca));
         responderJson(res, 202, {{"id", id}, {"prompt", pedido["prompt"]}, {"traduzido", pedido["traduzido"]}});
     });
 

@@ -132,9 +132,35 @@ $escolhidos = $componentes | Where-Object {
 }
 
 try {
+    Escrever "Conferindo o que ja esta instalado..."
+    $faltando = @()
     foreach ($c in $escolhidos) {
-        if (Pronto $c) { Escrever "Ja instalado: $($c.nome)" "Green"; continue }
-        Baixar $c
+        if (Pronto $c) { Escrever "Ja instalado: $($c.nome)" "Green" } else { $faltando += $c }
+    }
+
+    # Antes de baixar: confere se cabe no disco (com 1 GB de folga)
+    $precisaMb = 1024
+    foreach ($c in $faltando) { $precisaMb += $c.mb }
+    $disco = New-Object System.IO.DriveInfo ([System.IO.Path]::GetPathRoot((Get-Location).Path))
+    $livreMb = [math]::Floor($disco.AvailableFreeSpace / 1MB)
+    if ($faltando.Count -and $livreMb -lt $precisaMb) {
+        throw "Falta espaco no disco $($disco.Name): precisa de $([math]::Round($precisaMb / 1024, 1)) GB e tem $([math]::Round($livreMb / 1024, 1)) GB livres. Libere espaco ou mova a pasta do NidraIA para outro disco."
+    }
+
+    foreach ($c in $faltando) { Baixar $c }
+
+    # Confere se o motor enxerga uma placa de video (Vulkan); sem ela, gerar seria lentissimo
+    if (Test-Path "motor\sd-server.exe") {
+        # Pelo cmd, para os avisos que o motor escreve não virarem erro no PowerShell
+        $dispositivos = cmd /c "`"motor\sd-server.exe`" --list-devices 2>nul" | Where-Object { $_ -match "^Vulkan\d+\t" }
+        Escrever ""
+        if ($dispositivos) {
+            foreach ($d in $dispositivos) { Escrever "Placa de video encontrada: $(($d -split "`t")[1].Trim())" "Green" }
+        } else {
+            Escrever "ATENCAO: nao encontrei uma placa de video compativel (Vulkan)." "Red"
+            Escrever "Atualize o driver da placa de video (AMD, NVIDIA ou Intel) e rode este instalador de novo." "Red"
+            Escrever "Sem placa de video o NidraIA ate abre, mas gerar imagens fica muito lento." "Red"
+        }
     }
     Escrever ""
     Escrever "Tudo pronto! Abra o NidraIA.exe." "Green"

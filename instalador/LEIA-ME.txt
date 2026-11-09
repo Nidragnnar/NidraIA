@@ -30,6 +30,9 @@ DICAS
   ingles muito melhor.
 - Gostou de uma imagem? Clique nela e em "Reutilizar configuracoes".
   Mudando so a "Semente" voce ganha variacoes parecidas.
+- Escolha um "Estilo" (Anime, Aquarela, Foto realista...) para mudar o visual.
+- Em "Partir de uma imagem sua" voce envia uma foto ou desenho e a IA
+  redesenha. Descreva no texto o que aparece na imagem.
 - SDXL Turbo: rapido (segundos). FLUX.1 schnell: mais bonito, mais lento.
 - Clique numa imagem e use "Aumentar 4x" para deixa-la grande e nitida,
   ou "Gerar 4 variacoes" para ganhar versoes parecidas.

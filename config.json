@@ -56,5 +56,61 @@
             "id": "RealESRGAN_x4plus_anime_6B",
             "nome": "Anime e ilustração"
         }
+    ],
+    "estilos": [
+        {
+            "id": "nenhum",
+            "nome": "Nenhum",
+            "sufixo": "",
+            "negativo": ""
+        },
+        {
+            "id": "foto",
+            "nome": "Foto realista",
+            "sufixo": "photorealistic, professional photography, natural lighting, sharp focus, highly detailed",
+            "negativo": "cartoon, illustration, painting, drawing, anime"
+        },
+        {
+            "id": "cinema",
+            "nome": "Cinema",
+            "sufixo": "cinematic film still, dramatic lighting, shallow depth of field, film grain, color graded",
+            "negativo": "cartoon, flat lighting"
+        },
+        {
+            "id": "anime",
+            "nome": "Anime",
+            "sufixo": "anime style illustration, cel shading, vibrant colors, clean line art",
+            "negativo": "photo, photorealistic, 3d render"
+        },
+        {
+            "id": "aquarela",
+            "nome": "Aquarela",
+            "sufixo": "watercolor painting, soft washes, paper texture, delicate brush strokes",
+            "negativo": "photo, 3d render"
+        },
+        {
+            "id": "oleo",
+            "nome": "Pintura a óleo",
+            "sufixo": "oil painting, thick visible brush strokes, canvas texture, classical fine art",
+            "negativo": "photo, 3d render"
+        },
+        {
+            "id": "pixel",
+            "nome": "Pixel art",
+            "sufixo": "pixel art, 16-bit retro video game style, crisp pixels, limited color palette",
+            "negativo": "blurry, smooth gradients, photo"
+        },
+        {
+            "id": "3d",
+            "nome": "Animação 3D",
+            "sufixo": "3d animated movie style, soft studio lighting, cute, highly detailed render",
+            "negativo": "photo, flat, sketch"
+        },
+        {
+            "id": "dark",
+            "nome": "Fantasia sombria",
+            "sufixo": "dark fantasy art, moody atmosphere, dramatic shadows, epic scale, highly detailed",
+            "negativo": "cartoon, cute, bright colors"
+        }
     ]
 }

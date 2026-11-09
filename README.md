@@ -8,6 +8,8 @@ Gerador de imagens com IA que roda **no seu próprio computador**, de graça e s
   - **SDXL Turbo**: o mais rápido (cerca de 5 s por imagem)
   - **FLUX.1 schnell**: mais qualidade e entende melhor o prompt, mais lento
 - **Tradução automática do prompt para inglês**, feita no próprio PC pelo [llama.cpp](https://github.com/ggml-org/llama.cpp) (os modelos entendem inglês muito melhor). Por padrão a tradução aparece numa caixa para você **conferir e corrigir** antes de gerar
+- **Estilos prontos**: Foto realista, Cinema, Anime, Aquarela, Pintura a óleo, Pixel art, Animação 3D e Fantasia sombria. Eles acrescentam termos em inglês ao prompt (lista editável no `config.json`)
+- **Partir de uma imagem sua**: envie uma foto ou desenho e escolha o quanto a IA pode mudar
 - **Aumentar resolução 4×** com [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (512 → 2048 em poucos segundos), com um modelo para fotos e outro para anime e ilustração
 - **Gerar 4 variações** de uma imagem da galeria: mesma cena, detalhes diferentes (imagem para imagem com força 0,45)
 - 1 a 4 imagens por vez, com prévia, barra de progresso e botão de cancelar
@@ -20,7 +22,7 @@ Gerador de imagens com IA que roda **no seu próprio computador**, de graça e s
 
 Baixe o `.zip` da [última Release](https://github.com/Nidragnnar/NidraIA/releases), extraia e siga o `LEIA-ME.txt`:
 
-1. Dois cliques em **`Instalar componentes.bat`**: baixa o motor e os modelos, conferindo cada arquivo pelo SHA-256.
+1. Dois cliques em **`Instalar componentes.bat`**: confere se há espaço no disco, baixa o motor e os modelos conferindo cada arquivo pelo SHA-256 e mostra se a placa de vídeo foi encontrada.
 2. Dois cliques em **`NidraIA.exe`**: o navegador abre em http://localhost:3333.
 
 ## Estrutura
@@ -52,7 +54,9 @@ cmake -S . -B build -G "Visual Studio 18 2026" -A x64
 cmake --build build --config Release
 ```
 
-Ou dois cliques em `compilar.bat`. O `NidraIA.exe` é copiado para a raiz do projeto, com a biblioteca do Visual C++ embutida.
+Ou dois cliques em `compilar.bat`. O `NidraIA.exe` é copiado para a raiz do projeto, com a biblioteca do Visual C++ embutida, o ícone e a versão.
+
+A **versão** fica só no `CMakeLists.txt` (`project(NidraIA VERSION ...)`): ela vai para o programa, para as Propriedades do `.exe` e para o nome do zip da Release. O ícone é gerado por `recursos/gerar-icone.ps1`.
 
 Para testes, `NidraIA.exe --sem-navegador` não abre o navegador sozinho.
 
