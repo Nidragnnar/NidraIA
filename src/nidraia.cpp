@@ -10,6 +10,7 @@
 #include "httplib.h"
 #include "json.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <deque>
@@ -29,7 +30,7 @@ using json = nlohmann::json;
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
 
-static constexpr const char* VERSAO = "0.2.0";
+static constexpr const char* VERSAO = "0.3.0";
 
 // ========== Caminhos e configuração ==========
 struct Pastas {
@@ -258,6 +259,9 @@ static void ligarMotor(const std::string& id) {
         std::wstring opcao = chave == "model" ? L"-m" : L"--" + std::wstring(chave.begin(), chave.end());
         argumentos += L" " + opcao + L" " + aspas(pastas.modelos / caminhoU8(arquivo.get<std::string>()));
     }
+    // Modelos de aumento de resolução (Real-ESRGAN), se a pasta existir
+    if (fs::is_directory(pastas.modelos / "upscale"))
+        argumentos += L" --hires-upscalers-dir " + aspas(pastas.modelos / "upscale");
 
     std::lock_guard trava(mutexMotor);
     geracaoMotor++;
@@ -471,12 +475,16 @@ static json montarPedido(const json& corpo, const json& modelo) {
         pedido["promptOriginal"] = prompt;
         pedido["prompt"] = traduzir(prompt);
         if (!negativo.empty()) pedido["negativo"] = traduzir(negativo);
+    } else if (std::string original = texto(corpo, "promptOriginal"); !original.empty()) {
+        // Tradução já conferida (e talvez corrigida) na tela: guarda o português junto
+        pedido["promptOriginal"] = original.substr(0, 4000);
+        pedido["traduzido"] = true;
     }
     return pedido;
 }
 
-static json paraMotor(const json& pedido) {
-    return {
+static json paraMotor(const json& pedido, const std::string& imagemBase = "", double forca = 0) {
+    json motor = {
         {"prompt", pedido["prompt"]},
         {"negative_prompt", pedido["negativo"]},
         {"width", pedido["largura"]},
@@ -491,6 +499,14 @@ static json paraMotor(const json& pedido) {
         {"preview_interval", 1},
         {"output_format", "png"},
     };
+    // Imagem para imagem: parte de uma imagem existente; "strength" diz o quanto ela pode mudar
+    if (!imagemBase.empty()) {
+        motor["init_image"] = imagemBase;
+        motor["strength"] = forca;
+        // Codificar a imagem de entrada pede bastante memória de vídeo; em blocos cabe em placas de 8 GB
+        motor["vae_tiling_params"] = {{"enabled", true}};
+    }
+    return motor;
 }
 
 // ========== Galeria ==========
@@ -510,6 +526,30 @@ static std::string decodificarBase64(const std::string& entrada) {
         }
     }
     return saida;
+}
+
+static std::string codificarBase64(const std::string& entrada) {
+    static const char* alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string saida;
+    saida.reserve((entrada.size() + 2) / 3 * 4);
+    int valor = 0, bits = -6;
+    for (unsigned char c : entrada) {
+        valor = (valor << 8) + c;
+        bits += 8;
+        while (bits >= 0) {
+            saida.push_back(alfabeto[(valor >> bits) & 0x3F]);
+            bits -= 6;
+        }
+    }
+    if (bits > -6) saida.push_back(alfabeto[((valor << 8) >> (bits + 8)) & 0x3F]);
+    while (saida.size() % 4) saida.push_back('=');
+    return saida;
+}
+
+static std::string lerArquivo(const fs::path& arquivo) {
+    std::ifstream entrada(arquivo, std::ios::binary);
+    if (!entrada) throw ErroHttp(404, "Imagem não encontrada no disco.");
+    return {std::istreambuf_iterator<char>(entrada), std::istreambuf_iterator<char>()};
 }
 
 static void gravar(const fs::path& arquivo, const std::string& conteudo) {
@@ -613,6 +653,46 @@ static json listaModelos() {
     return lista;
 }
 
+static const json& modeloProntoOuErro() {
+    std::lock_guard trava(mutexMotor);
+    if (estadoMotor != EstadoMotor::Pronto) throw ErroHttp(503, "O motor ainda não está pronto.");
+    return *acharModelo(modeloAtivo);
+}
+
+// Manda o pedido para a fila do motor e guarda as configurações para salvar junto da imagem
+static std::string enfileirar(const json& pedido, const json& corpoMotor) {
+    json trabalho = chamarMotor("POST", "/sdcpp/v1/img_gen", corpoMotor);
+    std::string id = trabalho["id"].get<std::string>();
+    std::lock_guard trava(mutexPedidos);
+    pedidos[id] = pedido;
+    return id;
+}
+
+// Troca a mensagem técnica do motor por uma explicação, olhando o log recente
+static std::string explicarFalha(const std::string& mensagem) {
+    for (const auto& linha : ultimasLinhas(40)) {
+        if (linha.find("cannot make enough memory") != std::string::npos || linha.find("out of memory") != std::string::npos ||
+            linha.find("ErrorOutOfDeviceMemory") != std::string::npos) {
+            return "A placa de vídeo ficou sem memória. Feche jogos ou programas pesados, ou gere menos imagens por vez, "
+                   "e tente de novo.";
+        }
+    }
+    return mensagem.empty() ? "A geração falhou. Veja o log (clique na bolinha do topo)." : mensagem;
+}
+
+// Upscalers do config.json cujo arquivo .pth existe em modelos/upscale
+static json listaUpscalers() {
+    json lista = json::array();
+    if (!config.contains("upscalers")) return lista;
+    for (const auto& u : config["upscalers"]) {
+        std::string id = u["id"].get<std::string>();
+        auto pasta = pastas.modelos / "upscale";
+        if (fs::exists(pasta / caminhoU8(id + ".pth")) || fs::exists(pasta / caminhoU8(id + ".safetensors")))
+            lista.push_back({{"id", id}, {"nome", u["nome"]}});
+    }
+    return lista;
+}
+
 static bool temGeracaoEmAndamento() {
     std::lock_guard trava(mutexPedidos);
     return !pedidos.empty();
@@ -633,6 +713,7 @@ static void configurarRotas(httplib::Server& servidor) {
         estado["versao"] = VERSAO;
         estado["modelos"] = listaModelos();
         estado["tradutor"] = tradutorDisponivel();
+        estado["upscalers"] = listaUpscalers();
         estado["log"] = ultimasLinhas(60);
         responderJson(res, 200, estado);
     });
@@ -653,21 +734,88 @@ static void configurarRotas(httplib::Server& servidor) {
 
     servidor.Post("/api/gerar", [](const httplib::Request& req, httplib::Response& res) {
         json corpo = lerCorpo(req);
-        std::string modeloId;
-        {
-            std::lock_guard trava(mutexMotor);
-            if (estadoMotor != EstadoMotor::Pronto) throw ErroHttp(503, "O motor ainda não está pronto.");
-            modeloId = modeloAtivo;
-        }
-        const json& modelo = *acharModelo(modeloId);
+        const json& modelo = modeloProntoOuErro();
         json pedido = montarPedido(corpo, modelo);
         pedido["modelo"] = modelo["nome"];
-        json trabalho = chamarMotor("POST", "/sdcpp/v1/img_gen", paraMotor(pedido));
-        std::string id = trabalho["id"].get<std::string>();
-        {
-            std::lock_guard trava(mutexPedidos);
-            pedidos[id] = pedido;
-        }
+        std::string id = enfileirar(pedido, paraMotor(pedido));
+        responderJson(res, 202, {{"id", id}, {"prompt", pedido["prompt"]}, {"traduzido", pedido["traduzido"]}});
+    });
+
+    // Aumentar resolução 4×: roda o Real-ESRGAN numa imagem da galeria e salva o resultado como imagem nova
+    servidor.Post("/api/aumentar", [](const httplib::Request& req, httplib::Response& res) {
+        json corpo = lerCorpo(req);
+        std::string idImagem = texto(corpo, "id");
+        std::string upscaler = texto(corpo, "upscaler");
+        json disponiveis = listaUpscalers();
+        if (disponiveis.empty()) throw ErroHttp(409, "Os modelos de aumento de resolução não estão instalados.");
+        if (upscaler.empty()) upscaler = disponiveis[0]["id"].get<std::string>();
+        if (std::none_of(disponiveis.begin(), disponiveis.end(), [&](const json& u) { return u["id"] == upscaler; }))
+            throw ErroHttp(404, "Modelo de aumento desconhecido.");
+        if (temGeracaoEmAndamento()) throw ErroHttp(409, "Espere a geração atual terminar.");
+
+        json original;
+        for (const auto& item : listarGaleria())
+            if (item["id"] == idImagem) original = item;
+        if (original.is_null()) throw ErroHttp(404, "Imagem não encontrada.");
+        // Até 4096 px por lado: acima disso fica lento demais e a imagem pesa centenas de MB
+        if (original["largura"].get<int>() * 4 > 4096 || original["altura"].get<int>() * 4 > 4096)
+            throw ErroHttp(422, "Esta imagem já é grande demais para aumentar 4× (o limite é 4096 px por lado).");
+
+        auto inicio = std::chrono::steady_clock::now();
+        std::string imagem = codificarBase64(lerArquivo(pastas.galeria / caminhoU8(original["arquivo"].get<std::string>())));
+        json resultado = chamarMotor("POST", "/sdcpp/v1/upscale",
+                                     {{"image", imagem}, {"upscaler", upscaler}, {"output_format", "png"}});
+        double segundos = std::chrono::duration<double>(std::chrono::steady_clock::now() - inicio).count();
+
+        // Salva ao lado da original, com as mesmas informações e a marca do aumento
+        std::string dia = diaLocal();
+        fs::path pasta = pastas.galeria / dia;
+        fs::create_directories(pasta);
+        std::string id = idImagem + "-4x";
+        for (int n = 2; fs::exists(pasta / (id + ".png")); n++) id = std::format("{}-4x{}", idImagem, n);
+        gravar(pasta / (id + ".png"), decodificarBase64(resultado["images"][0]["b64_json"].get<std::string>()));
+
+        json info = original;
+        info["id"] = id;
+        info["arquivo"] = dia + "/" + id + ".png";
+        info["criadoEm"] = agoraIso();
+        info["largura"] = resultado["width"];
+        info["altura"] = resultado["height"];
+        info["segundos"] = segundos;
+        info["aumentadaDe"] = idImagem;
+        info["upscaler"] = upscaler;
+        gravar(pasta / (id + ".json"), info.dump(2));
+        responderJson(res, 200, info);
+    });
+
+    // Variações: imagem para imagem a partir de uma imagem da galeria, com sementes novas.
+    // A força baixa mantém a composição e muda os detalhes.
+    servidor.Post("/api/variacoes", [](const httplib::Request& req, httplib::Response& res) {
+        json corpo = lerCorpo(req);
+        std::string idImagem = texto(corpo, "id");
+        json original;
+        for (const auto& item : listarGaleria())
+            if (item["id"] == idImagem) original = item;
+        if (original.is_null()) throw ErroHttp(404, "Imagem não encontrada.");
+
+        const json& modelo = modeloProntoOuErro();
+        json base = {
+            {"prompt", original["prompt"]},
+            {"negativo", original.value("negativo", "")},
+            {"largura", original["largura"]},
+            {"altura", original["altura"]},
+            {"quantidade", corpo.contains("quantidade") ? corpo["quantidade"] : json(4)},
+        };
+        if (original.contains("promptOriginal") && original["promptOriginal"].is_string())
+            base["promptOriginal"] = original["promptOriginal"];
+        json pedido = montarPedido(base, modelo);
+        double forca = numero(corpo, "forca", 0.2, 0.8, 0.45);
+        pedido["modelo"] = modelo["nome"];
+        pedido["variacaoDe"] = idImagem;
+        pedido["forca"] = forca;
+
+        std::string imagem = codificarBase64(lerArquivo(pastas.galeria / caminhoU8(original["arquivo"].get<std::string>())));
+        std::string id = enfileirar(pedido, paraMotor(pedido, imagem, forca));
         responderJson(res, 202, {{"id", id}, {"prompt", pedido["prompt"]}, {"traduzido", pedido["traduzido"]}});
     });
 
@@ -690,7 +838,7 @@ static void configurarRotas(httplib::Server& servidor) {
             resposta["passo"] = t["preview"]["step"];
             resposta["totalPassos"] = t["preview"]["total_steps"];
         }
-        if (t.contains("error") && t["error"].is_object()) resposta["erro"] = t["error"].value("message", "");
+        if (t.contains("error") && t["error"].is_object()) resposta["erro"] = explicarFalha(t["error"].value("message", ""));
 
         // Ao terminar, salva na galeria uma vez só
         if (status == "completed" || status == "failed" || status == "cancelled") {

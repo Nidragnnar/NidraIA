@@ -46,5 +46,15 @@
         "executavel": "tradutor/llama-server.exe",
         "modelo": "tradutor/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
         "desligarAposMinutos": 5
-    }
+    },
+    "upscalers": [
+        {
+            "id": "RealESRGAN_x4plus",
+            "nome": "Fotos e imagens em geral"
+        },
+        {
+            "id": "RealESRGAN_x4plus_anime_6B",
+            "nome": "Anime e ilustração"
+        }
+    ]
 }

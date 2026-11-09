@@ -7,7 +7,9 @@ Gerador de imagens com IA que roda **no seu próprio computador**, de graça e s
 - Dois modelos, com troca pela própria interface:
   - **SDXL Turbo**: o mais rápido (cerca de 5 s por imagem)
   - **FLUX.1 schnell**: mais qualidade e entende melhor o prompt, mais lento
-- **Tradução automática do prompt para inglês**, feita no próprio PC pelo [llama.cpp](https://github.com/ggml-org/llama.cpp) (os modelos entendem inglês muito melhor)
+- **Tradução automática do prompt para inglês**, feita no próprio PC pelo [llama.cpp](https://github.com/ggml-org/llama.cpp) (os modelos entendem inglês muito melhor). Por padrão a tradução aparece numa caixa para você **conferir e corrigir** antes de gerar
+- **Aumentar resolução 4×** com [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (512 → 2048 em poucos segundos), com um modelo para fotos e outro para anime e ilustração
+- **Gerar 4 variações** de uma imagem da galeria: mesma cena, detalhes diferentes (imagem para imagem com força 0,45)
 - 1 a 4 imagens por vez, com prévia, barra de progresso e botão de cancelar
 - Formatos quadrado, retrato, paisagem e grande
 - Semente (seed) salva em cada imagem: **Reutilizar configurações** repete ou varia uma imagem
@@ -65,6 +67,7 @@ O `instalador/instalar.ps1` tem a lista completa, com links e hashes. Resumo:
 | stable-diffusion.cpp `master-1062-b43af40` (Vulkan) | 29 MB | MIT |
 | SDXL Turbo fp16 | 6,6 GB | Stability AI, **uso não comercial** |
 | FLUX.1 schnell Q4_0 + T5 Q4_K_M + CLIP-L + VAE | 9,9 GB | Apache 2.0 |
+| Real-ESRGAN x4plus + x4plus anime 6B | 81 MB | BSD-3 |
 | llama.cpp `b12208` (Vulkan) | 36 MB | MIT |
 | Qwen3-4B-Instruct-2507 Q4_K_M (tradutor) | 2,4 GB | Apache 2.0 |
 
@@ -80,6 +83,9 @@ Para adicionar outro modelo, coloque os arquivos em `modelos/` e acrescente uma 
 | FLUX.1 schnell, 1 imagem 512 × 512, 4 passos | 35 a 42 s |
 | FLUX.1 schnell, 1 imagem 1024 × 1024 | cerca de 61 s |
 | Tradução do prompt (Qwen3 4B, no processador) | 1 a 2,5 s (a primeira, que liga o tradutor, 3 a 4 s) |
+| SDXL Turbo, 4 variações de uma imagem 512 × 512 | 72 a 78 s com um jogo aberto usando 3,7 GB da placa (sem o jogo não medido) |
+| Aumentar 4× (512 → 2048), modelo de fotos | cerca de 7 s |
+| Aumentar 4× (512 → 2048), modelo de anime | cerca de 3 s |
 | Trocar de modelo | o motor reinicia em cerca de 1 s; o primeiro uso carrega o modelo |
 
 O tradutor ocupa cerca de 2,5 GB de RAM e se desliga sozinho depois de 5 minutos sem uso (`desligarAposMinutos` no `config.json`).

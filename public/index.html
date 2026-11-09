@@ -40,6 +40,23 @@
                 <input type="checkbox" id="traduzir" checked>
                 <span>Traduzir para inglês antes de gerar <em>(o modelo entende inglês melhor)</em></span>
             </label>
+            <label class="opcao-check opcao-sub" id="conferir-opcao">
+                <input type="checkbox" id="conferir" checked>
+                <span>Mostrar a tradução para eu conferir antes</span>
+            </label>
+
+            <!-- Tradução para conferir: aparece depois de clicar em "Traduzir e conferir" -->
+            <section id="conferencia" class="conferencia" hidden>
+                <label class="campo">
+                    <span>Em inglês <em>(corrija se algo estiver errado)</em></span>
+                    <textarea id="prompt-en" rows="4" maxlength="4000"></textarea>
+                </label>
+                <label class="campo" id="negativo-en-campo">
+                    <span>Evitar, em inglês</span>
+                    <textarea id="negativo-en" rows="2" maxlength="4000"></textarea>
+                </label>
+                <button type="button" class="link" id="conferencia-fechar">Voltar e mudar o texto em português</button>
+            </section>
 
             <details class="extra">
                 <summary>O que evitar <em>(opcional)</em></summary>
@@ -124,7 +141,12 @@
                 <p id="vis-original" class="traducao" hidden></p>
                 <dl id="vis-dados" class="vis-dados"></dl>
                 <div class="vis-acoes">
-                    <button type="button" class="botao" id="vis-reusar">Reutilizar configurações</button>
+                    <button type="button" class="botao" id="vis-variacoes" title="Gera 4 imagens parecidas com esta">Gerar 4 variações</button>
+                    <div class="aumentar" id="vis-aumentar-grupo" hidden>
+                        <select id="vis-upscaler" aria-label="Tipo de imagem para aumentar"></select>
+                        <button type="button" class="botao botao-secundario" id="vis-aumentar">Aumentar 4×</button>
+                    </div>
+                    <button type="button" class="botao botao-secundario" id="vis-reusar">Reutilizar configurações</button>
                     <a class="botao botao-secundario" id="vis-baixar" download>Baixar</a>
                     <button type="button" class="botao botao-perigo" id="vis-apagar">Apagar</button>
                 </div>

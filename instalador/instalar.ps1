@@ -11,6 +11,12 @@ $componentes = @(
     @{ grupo = "sdxl"; nome = "Modelo SDXL Turbo"; mb = 6617
        url = "https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors"
        destino = "modelos\sd_xl_turbo_1.0_fp16.safetensors"; bytes = 6938081905; sha = "e869ac7d6942cb327d68d5ed83a40447aadf20e0c3358d98b2cc9e270db0da26" },
+    @{ grupo = "upscale"; nome = "Aumentar resolução (fotos)"; mb = 64
+       url = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
+       destino = "modelos\upscale\RealESRGAN_x4plus.pth"; sha = "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1" },
+    @{ grupo = "upscale"; nome = "Aumentar resolução (anime)"; mb = 17
+       url = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth"
+       destino = "modelos\upscale\RealESRGAN_x4plus_anime_6B.pth"; sha = "f872d837d3c90ed2e05227bed711af5671a6fd1c9f7d7e91c911a61f155e99da" },
     @{ grupo = "flux"; nome = "FLUX.1 schnell (modelo)"; mb = 6566
        url = "https://huggingface.co/leejet/FLUX.1-schnell-gguf/resolve/main/flux1-schnell-q4_0.gguf"
        destino = "modelos\flux-schnell\flux1-schnell-q4_0.gguf"; bytes = 6884606880; sha = "4f30741d2bfc786c92934ce925fcb0a43df3441e76504b797c3d5d5f0878fa6f" },
@@ -116,13 +122,13 @@ Escrever "=====================================" "Yellow"
 Escrever "   Instalador de componentes do NidraIA" "Yellow"
 Escrever "=====================================" "Yellow"
 Escrever ""
-Escrever "O motor e o SDXL Turbo sao obrigatorios (cerca de 6,6 GB)."
+Escrever "O motor, o SDXL Turbo e o aumento de resolucao sao obrigatorios (cerca de 6,7 GB)."
 Escrever ""
 $flux = (Read-Host "Baixar tambem o FLUX.1 schnell? Mais qualidade, mais lento (cerca de 9,9 GB) [s/N]") -match "^[sS]"
 $tradutor = (Read-Host "Baixar o tradutor de prompt para ingles? (cerca de 2,4 GB) [S/n]") -notmatch "^[nN]"
 
 $escolhidos = $componentes | Where-Object {
-    $_.grupo -in @("motor", "sdxl") -or ($flux -and $_.grupo -eq "flux") -or ($tradutor -and $_.grupo -eq "tradutor")
+    $_.grupo -in @("motor", "sdxl", "upscale") -or ($flux -and $_.grupo -eq "flux") -or ($tradutor -and $_.grupo -eq "tradutor")
 }
 
 try {

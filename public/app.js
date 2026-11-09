@@ -11,6 +11,16 @@ const el = {
     modeloDesc: $("#modelo-desc"),
     traduzir: $("#traduzir"),
     traduzirOpcao: $("#traduzir-opcao"),
+    conferir: $("#conferir"),
+    conferirOpcao: $("#conferir-opcao"),
+    conferencia: $("#conferencia"),
+    conferenciaFechar: $("#conferencia-fechar"),
+    promptEn: $("#prompt-en"),
+    negativoEn: $("#negativo-en"),
+    negativoEnCampo: $("#negativo-en-campo"),
+    visAumentarGrupo: $("#vis-aumentar-grupo"),
+    visAumentar: $("#vis-aumentar"),
+    visUpscaler: $("#vis-upscaler"),
     atualTraducao: $("#atual-traducao"),
     visOriginal: $("#vis-original"),
     prompt: $("#prompt"),
@@ -88,6 +98,8 @@ async function acompanharMotor() {
             const estado = await api("/api/estado");
             el.versao.textContent = `v${estado.versao}`;
             el.traduzirOpcao.hidden = !estado.tradutor;
+            atualizarRotuloGerar();
+            if (!upscalers.length) montarUpscalers(estado.upscalers || []);
             if (estado.modelo !== modeloAtivo || !modelos.length) {
                 modelos = estado.modelos;
                 modeloAtivo = estado.modelo;
@@ -173,9 +185,60 @@ el.estado.addEventListener("click", () => {
     el.estado.setAttribute("aria-expanded", String(!el.log.hidden));
 });
 
+// ========== Tradução para conferir ==========
+const traduzirAtivo = () => !el.traduzirOpcao.hidden && el.traduzir.checked;
+const precisaConferir = () => traduzirAtivo() && el.conferir.checked && el.conferencia.hidden;
+
+function atualizarRotuloGerar() {
+    el.conferirOpcao.hidden = !traduzirAtivo();
+    el.gerar.firstChild.textContent = precisaConferir() ? "Traduzir e conferir " : "Gerar ";
+}
+
+function fecharConferencia() {
+    el.conferencia.hidden = true;
+    atualizarRotuloGerar();
+}
+
+// Traduz o prompt (e o "evitar") e mostra em caixas editáveis; a geração só vem no próximo clique
+async function traduzirParaConferir() {
+    if (!el.prompt.value.trim()) {
+        mostrarErro("Escreva o que você quer ver na imagem.");
+        return;
+    }
+    trabalhoAtual = "traduzindo";
+    atualizarBotoes();
+    el.gerar.firstChild.textContent = "Traduzindo... ";
+    try {
+        const traduzirTexto = async (texto) =>
+            texto.trim() ? (await api("/api/traduzir", { method: "POST", body: JSON.stringify({ texto }) })).traducao : "";
+        el.promptEn.value = await traduzirTexto(el.prompt.value);
+        el.negativoEn.value = await traduzirTexto(el.negativo.value);
+        el.negativoEnCampo.hidden = !el.negativoEn.value;
+        el.conferencia.hidden = false;
+        el.promptEn.focus();
+    } catch (erro) {
+        mostrarErro(erro.message);
+    } finally {
+        trabalhoAtual = null;
+        atualizarBotoes();
+        atualizarRotuloGerar();
+    }
+}
+
+// Mudou o texto em português: a tradução mostrada ficou velha
+for (const campo of [el.prompt, el.negativo]) campo.addEventListener("input", () => el.conferencia.hidden || fecharConferencia());
+el.traduzir.addEventListener("change", fecharConferencia);
+el.conferir.addEventListener("change", fecharConferencia);
+el.conferenciaFechar.addEventListener("click", () => {
+    fecharConferencia();
+    el.prompt.focus();
+});
+
 // ========== Gerar ==========
 async function gerar() {
     el.erroForm.hidden = true;
+    if (precisaConferir()) return traduzirParaConferir();
+
     const seedTexto = el.seed.value.trim();
     if (seedTexto && !/^\d+$/.test(seedTexto)) {
         mostrarErro("A semente deve ser um número inteiro, ou fique vazia para ser aleatória.");
@@ -189,20 +252,33 @@ async function gerar() {
         seed: seedTexto ? Number(seedTexto) : -1,
         passos: Number(el.passos.value),
         cfg: Number(el.cfg.value),
-        traduzir: !el.traduzirOpcao.hidden && el.traduzir.checked,
+        traduzir: traduzirAtivo(),
     };
+    // Tradução já conferida: manda o inglês (talvez corrigido) e guarda o português junto
+    if (traduzirAtivo() && !el.conferencia.hidden) {
+        Object.assign(pedido, {
+            promptOriginal: el.prompt.value,
+            prompt: el.promptEn.value,
+            negativo: el.negativoEn.value || el.negativo.value,
+            traduzir: false,
+        });
+    }
+    await enviar("/api/gerar", pedido, pedido);
+}
 
+// Envia um pedido de geração (normal ou de variações) e acompanha até o fim
+async function enviar(caminho, corpo, formato) {
     // Já trava o botão: a tradução pode levar alguns segundos antes de a geração começar
     trabalhoAtual = "enviando";
     atualizarBotoes();
-    iniciarAtual(pedido);
-    if (pedido.traduzir) el.atualStatus.textContent = "Traduzindo o prompt...";
+    iniciarAtual(formato);
+    if (corpo.traduzir) el.atualStatus.textContent = "Traduzindo o prompt...";
     try {
-        const resposta = await api("/api/gerar", { method: "POST", body: JSON.stringify(pedido) });
+        const resposta = await api(caminho, { method: "POST", body: JSON.stringify(corpo) });
         trabalhoAtual = resposta.id;
         el.atualTraducao.hidden = !resposta.traduzido;
         el.atualTraducao.textContent = resposta.traduzido ? `Em inglês: ${resposta.prompt}` : "";
-        await acompanhar(resposta.id, pedido);
+        await acompanhar(resposta.id, formato);
     } catch (erro) {
         mostrarErro(erro.message);
         el.atual.hidden = true;
@@ -336,6 +412,8 @@ function abrir(item) {
     el.visOriginal.hidden = !item.promptOriginal;
     el.visOriginal.textContent = item.promptOriginal ? `Você escreveu: ${item.promptOriginal}` : "";
     el.visBaixar.href = `/galeria/${item.arquivo}`;
+    // Até 4096 px por lado depois de aumentar (mais que isso fica lento e pesado demais)
+    el.visAumentarGrupo.hidden = !upscalers.length || item.largura * 4 > 4096 || item.altura * 4 > 4096;
     el.visBaixar.download = `${item.id}.png`;
 
     const dados = [
@@ -345,6 +423,8 @@ function abrir(item) {
         ["CFG", item.cfg],
         ["Tempo", `${item.segundos.toFixed(1)} s`],
         ["Modelo", item.modelo.replace(/\.safetensors$/, "")],
+        ...(item.variacaoDe ? [["Variação", `de outra imagem (força ${item.forca})`]] : []),
+        ...(item.aumentadaDe ? [["Aumentada", `4× com ${upscalers.find((u) => u.id === item.upscaler)?.nome || item.upscaler}`]] : []),
         ["Criada em", new Date(item.criadoEm).toLocaleString("pt-BR")],
     ];
     if (item.negativo) dados.splice(1, 0, ["Evitar", item.negativo]);
@@ -371,6 +451,7 @@ $("#vis-reusar").addEventListener("click", () => {
     el.prompt.value = item.prompt;
     el.negativo.value = item.negativo || "";
     el.traduzir.checked = false;
+    fecharConferencia();
     const formato = el.form.querySelector(`input[name=formato][value="${item.largura}x${item.altura}"]`);
     if (formato) formato.checked = true;
     el.quantidade.value = "1";
@@ -382,6 +463,59 @@ $("#vis-reusar").addEventListener("click", () => {
     el.prompt.focus();
     const outroModelo = item.modelo !== modeloAtual()?.nome;
     avisar(outroModelo ? `Configurações carregadas. A imagem foi feita com ${item.modelo}: troque o modelo para repetir igual.` : "Configurações carregadas. Mesma semente = mesma imagem.");
+});
+
+// ========== Aumentar resolução 4× ==========
+let upscalers = [];
+
+function montarUpscalers(lista) {
+    upscalers = lista;
+    el.visUpscaler.replaceChildren(
+        ...lista.map((u) => {
+            const opcao = document.createElement("option");
+            opcao.value = u.id;
+            opcao.textContent = u.nome;
+            return opcao;
+        })
+    );
+}
+
+el.visAumentar.addEventListener("click", async () => {
+    const item = abertoNoVisualizador;
+    if (trabalhoAtual) {
+        avisar("Espere a geração atual terminar.");
+        return;
+    }
+    el.visAumentar.disabled = true;
+    el.visAumentar.textContent = "Aumentando...";
+    try {
+        const nova = await api("/api/aumentar", {
+            method: "POST",
+            body: JSON.stringify({ id: item.id, upscaler: el.visUpscaler.value }),
+        });
+        galeria = [nova, ...galeria];
+        desenharGaleria();
+        abrir(nova);
+        avisar(`Pronto: ${nova.largura} × ${nova.altura} em ${nova.segundos.toFixed(1)} s. A original continua na galeria.`);
+    } catch (erro) {
+        avisar(erro.message);
+    } finally {
+        el.visAumentar.disabled = false;
+        el.visAumentar.textContent = "Aumentar 4×";
+    }
+});
+
+// Variações: 4 imagens parecidas, partindo desta imagem (imagem para imagem) com sementes novas
+$("#vis-variacoes").addEventListener("click", () => {
+    const item = abertoNoVisualizador;
+    if (!motorPronto || trabalhoAtual) {
+        avisar("Espere o motor ficar pronto ou a geração atual terminar.");
+        return;
+    }
+    el.vis.close();
+    el.erroForm.hidden = true;
+    enviar("/api/variacoes", { id: item.id, quantidade: 4 }, { quantidade: 4, largura: item.largura, altura: item.altura });
+    el.atual.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 $("#vis-apagar").addEventListener("click", async () => {
