@@ -26,15 +26,27 @@ $componentes = @(
     @{ grupo = "flux"; nome = "FLUX.1 schnell (texto CLIP)"; mb = 235
        url = "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors"
        destino = "modelos\flux-schnell\clip_l.safetensors"; bytes = 246144152; sha = "660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd" },
-    @{ grupo = "flux"; nome = "FLUX.1 schnell (VAE)"; mb = 320
+    @{ grupo = "fluxvae"; nome = "VAE do FLUX.1 (usado pelo FLUX.1 e pelo Z-Image)"; mb = 320
        url = "https://huggingface.co/ffxvs/vae-flux/resolve/main/ae.safetensors"
        destino = "modelos\flux-schnell\ae.safetensors"; bytes = 335304388; sha = "afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38" },
     @{ grupo = "tradutor"; nome = "Tradutor llama.cpp"; mb = 36
        url = "https://github.com/ggml-org/llama.cpp/releases/download/b12208/llama-b12208-bin-win-vulkan-x64.zip"
        destino = "tradutor\llama.zip"; sha = "377f3daa288624535b992a0b88ef93b1689c3445547b6666c411561586b6c477"; extrair = "tradutor" },
-    @{ grupo = "tradutor"; nome = "Tradutor Qwen3 4B"; mb = 2382
+    @{ grupo = "tradutor"; nome = "Tradutor Qwen3 4B (usado também pelo Z-Image)"; mb = 2382
        url = "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
-       destino = "tradutor\Qwen3-4B-Instruct-2507-Q4_K_M.gguf"; bytes = 2497281120; sha = "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597" }
+       destino = "tradutor\Qwen3-4B-Instruct-2507-Q4_K_M.gguf"; bytes = 2497281120; sha = "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597" },
+    @{ grupo = "zimage"; nome = "Z-Image Turbo (modelo)"; mb = 3685
+       url = "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf"
+       destino = "modelos\z-image-turbo\z_image_turbo-Q4_K.gguf"; bytes = 3864250304; sha = "14b375ab4f226bc5378f68f37e899ef3c2242b8541e61e2bc1aff40976086fbd" },
+    @{ grupo = "klein"; nome = "FLUX.2 klein 4B (modelo)"; mb = 4101
+       url = "https://huggingface.co/leejet/FLUX.2-klein-4B-GGUF/resolve/main/flux-2-klein-4b-Q8_0.gguf"
+       destino = "modelos\flux2-klein\flux-2-klein-4b-Q8_0.gguf"; bytes = 4300629440; sha = "0bba6951258ec8f92d51114a8fa13e66828297bfff58a738f52729b3ef66fa28" },
+    @{ grupo = "klein"; nome = "FLUX.2 klein 4B (texto Qwen3 4B)"; mb = 2382
+       url = "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf"
+       destino = "modelos\flux2-klein\Qwen3-4B-Q4_K_M.gguf"; bytes = 2497281312; sha = "f6f851777709861056efcdad3af01da38b31223a3ba26e61a4f8bf3a2195813a" },
+    @{ grupo = "klein"; nome = "FLUX.2 klein 4B (VAE)"; mb = 238
+       url = "https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors"
+       destino = "modelos\flux2-klein\full_encoder_small_decoder.safetensors"; bytes = 249519092; sha = "ea4273f02d1fafbf8e1d1c2cf6018ed8748652eb0bf34f2dd91171f16f15ab62" }
 )
 
 function Escrever($texto, $cor = "Gray") { Write-Host $texto -ForegroundColor $cor }
@@ -126,9 +138,16 @@ Escrever "O motor, o SDXL Turbo e o aumento de resolucao sao obrigatorios (cerca
 Escrever ""
 $flux = (Read-Host "Baixar tambem o FLUX.1 schnell? Mais qualidade, mais lento (cerca de 9,9 GB) [s/N]") -match "^[sS]"
 $tradutor = (Read-Host "Baixar o tradutor de prompt para ingles? (cerca de 2,4 GB) [S/n]") -notmatch "^[nN]"
+$klein = (Read-Host "Baixar o FLUX.2 klein 4B? Recomendado: rapido, caprichado e escreve texto na imagem (cerca de 6,7 GB) [S/n]") -notmatch "^[nN]"
+$zimage = (Read-Host "Baixar o Z-Image Turbo? Fotos muito realistas e texto na imagem (cerca de 3,7 GB, mais o tradutor e o VAE se faltarem) [s/N]") -match "^[sS]"
 
+# O Z-Image usa o modelo do tradutor como codificador de texto e o VAE do FLUX.1
 $escolhidos = $componentes | Where-Object {
-    $_.grupo -in @("motor", "sdxl", "upscale") -or ($flux -and $_.grupo -eq "flux") -or ($tradutor -and $_.grupo -eq "tradutor")
+    $_.grupo -in @("motor", "sdxl", "upscale") -or
+    ($flux -and $_.grupo -in @("flux", "fluxvae")) -or
+    (($tradutor -or $zimage) -and $_.grupo -eq "tradutor") -or
+    ($zimage -and $_.grupo -in @("zimage", "fluxvae")) -or
+    ($klein -and $_.grupo -eq "klein")
 }
 
 try {

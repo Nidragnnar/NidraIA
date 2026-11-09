@@ -8,7 +8,8 @@ O QUE PRECISA
 - Windows 10 ou 11 (64 bits)
 - Placa de video AMD, NVIDIA ou Intel com pelo menos 6 GB
   (8 GB ou mais e o ideal) e o driver atualizado
-- Uns 8 GB livres no disco (20 GB com o FLUX e o tradutor)
+- Uns 17 GB livres no disco com as respostas padrao do instalador
+  (SDXL Turbo, FLUX.2 klein e tradutor). Cerca de 31 GB com tudo.
 
 COMO INSTALAR (so na primeira vez)
 1. Extraia esta pasta inteira onde quiser (de preferencia num disco
@@ -33,7 +34,13 @@ DICAS
 - Escolha um "Estilo" (Anime, Aquarela, Foto realista...) para mudar o visual.
 - Em "Partir de uma imagem sua" voce envia uma foto ou desenho e a IA
   redesenha. Descreva no texto o que aparece na imagem.
-- SDXL Turbo: rapido (segundos). FLUX.1 schnell: mais bonito, mais lento.
+- Qual modelo usar?
+  FLUX.2 klein: o melhor para o dia a dia (rapido e caprichado).
+  SDXL Turbo: o mais rapido em tamanho pequeno, bom para testar ideias.
+  Z-Image Turbo: fotos muito realistas.
+  FLUX.1 schnell: bonito, mas o mais lento.
+- Quer um texto escrito na imagem (placa, letreiro)? Use o FLUX.2 klein
+  ou o Z-Image e escreva o texto entre aspas, ex.: uma placa escrita "BAR DO ZE".
 - Clique numa imagem e use "Aumentar 4x" para deixa-la grande e nitida,
   ou "Gerar 4 variacoes" para ganhar versoes parecidas.
 
@@ -46,7 +53,8 @@ SE DER PROBLEMA
 
 LICENCAS
 - SDXL Turbo: Stability AI, so para uso NAO comercial.
-- FLUX.1 schnell: Apache 2.0, livre inclusive para uso comercial.
+- FLUX.1 schnell, FLUX.2 klein 4B e Z-Image Turbo: Apache 2.0, livres
+  inclusive para uso comercial.
 - stable-diffusion.cpp, llama.cpp, cpp-httplib, nlohmann/json: MIT.
 - Real-ESRGAN (aumentar resolucao): BSD-3.
 - Qwen3 4B Instruct (tradutor): Apache 2.0.

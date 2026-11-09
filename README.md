@@ -4,9 +4,11 @@ Gerador de imagens com IA que roda **no seu próprio computador**, de graça e s
 
 ## Recursos
 
-- Dois modelos, com troca pela própria interface:
-  - **SDXL Turbo**: o mais rápido (cerca de 5 s por imagem)
-  - **FLUX.1 schnell**: mais qualidade e entende melhor o prompt, mais lento
+- Quatro modelos, com troca pela própria interface:
+  - **SDXL Turbo**: o mais rápido em 512 px (cerca de 5 s por imagem)
+  - **FLUX.2 klein 4B**: rápido e caprichado, segue bem o prompt e escreve textos na imagem (recomendado)
+  - **Z-Image Turbo**: fotos muito realistas e textos na imagem
+  - **FLUX.1 schnell**: mais qualidade que o SDXL, mas o mais lento
 - **Tradução automática do prompt para inglês**, feita no próprio PC pelo [llama.cpp](https://github.com/ggml-org/llama.cpp) (os modelos entendem inglês muito melhor). Por padrão a tradução aparece numa caixa para você **conferir e corrigir** antes de gerar
 - **Estilos prontos**: Foto realista, Cinema, Anime, Aquarela, Pintura a óleo, Pixel art, Animação 3D e Fantasia sombria. Eles acrescentam termos em inglês ao prompt (lista editável no `config.json`)
 - **Partir de uma imagem sua**: envie uma foto ou desenho e escolha o quanto a IA pode mudar
@@ -73,7 +75,9 @@ O `instalador/instalar.ps1` tem a lista completa, com links e hashes. Resumo:
 | FLUX.1 schnell Q4_0 + T5 Q4_K_M + CLIP-L + VAE | 9,9 GB | Apache 2.0 |
 | Real-ESRGAN x4plus + x4plus anime 6B | 81 MB | BSD-3 |
 | llama.cpp `b12208` (Vulkan) | 36 MB | MIT |
-| Qwen3-4B-Instruct-2507 Q4_K_M (tradutor) | 2,4 GB | Apache 2.0 |
+| Qwen3-4B-Instruct-2507 Q4_K_M (tradutor; também é o codificador de texto do Z-Image) | 2,4 GB | Apache 2.0 |
+| Z-Image Turbo Q4_K (usa o VAE do FLUX.1 e o Qwen3 do tradutor) | 3,7 GB | Apache 2.0 |
+| FLUX.2 klein 4B Q8_0 + Qwen3-4B Q4_K_M + VAE | 6,6 GB | Apache 2.0 |
 
 Para adicionar outro modelo, coloque os arquivos em `modelos/` e acrescente uma entrada em `modelos` no `config.json`. Cada chave de `arquivos` vira uma opção do motor (`model` → `-m`, `vae` → `--vae`, `diffusion-model` → `--diffusion-model`...).
 
@@ -91,6 +95,17 @@ Para adicionar outro modelo, coloque os arquivos em `modelos/` e acrescente uma 
 | Aumentar 4× (512 → 2048), modelo de fotos | cerca de 7 s |
 | Aumentar 4× (512 → 2048), modelo de anime | cerca de 3 s |
 | Trocar de modelo | o motor reinicia em cerca de 1 s; o primeiro uso carrega o modelo |
+
+### Os 4 modelos no mesmo dia (1024 × 1024, mesma semente)
+
+Medido com outros programas ocupando cerca de 3,3 GB da placa de vídeo (Windows, navegador, Steam, papel de parede animado), por isso o SDXL e o FLUX.1 ficaram mais lentos que na tabela acima. Serve para comparar os modelos entre si.
+
+| Modelo | 512 × 512 | 1024 × 1024 | Texto na imagem ("NIDRA IA" numa placa) |
+| --- | --- | --- | --- |
+| SDXL Turbo (4 passos) | 8 s | 43 s | errou ("NDRA", "NIIDRAA") |
+| FLUX.1 schnell (4 passos) | 48 s | 84 a 87 s | quase ("NIDRA. IA") |
+| Z-Image Turbo (9 passos) | 21 s | 60 s | acertou |
+| FLUX.2 klein 4B (4 passos) | 11 s | 24 a 26 s | acertou |
 
 O tradutor ocupa cerca de 2,5 GB de RAM e se desliga sozinho depois de 5 minutos sem uso (`desligarAposMinutos` no `config.json`).
 

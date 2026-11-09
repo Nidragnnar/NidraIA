@@ -40,6 +40,44 @@
                 "amostrador": "euler"
             },
             "maxPassos": 8
+        },
+        {
+            "id": "z-image-turbo",
+            "nome": "Z-Image Turbo",
+            "descricao": "Fotos muito realistas e escreve textos dentro da imagem (placas, letreiros).",
+            "licenca": "Apache 2.0: livre, inclusive uso comercial",
+            "arquivos": {
+                "diffusion-model": "z-image-turbo/z_image_turbo-Q4_K.gguf",
+                "vae": "flux-schnell/ae.safetensors",
+                "llm": "../tradutor/Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+            },
+            "padroes": {
+                "largura": 1024,
+                "altura": 1024,
+                "passos": 9,
+                "cfg": 1,
+                "amostrador": "euler"
+            },
+            "maxPassos": 20
+        },
+        {
+            "id": "flux2-klein",
+            "nome": "FLUX.2 klein 4B",
+            "descricao": "Rápido e caprichado: segue bem o prompt e escreve textos na imagem. Bom para o dia a dia.",
+            "licenca": "Apache 2.0: livre, inclusive uso comercial",
+            "arquivos": {
+                "diffusion-model": "flux2-klein/flux-2-klein-4b-Q8_0.gguf",
+                "vae": "flux2-klein/full_encoder_small_decoder.safetensors",
+                "llm": "flux2-klein/Qwen3-4B-Q4_K_M.gguf"
+            },
+            "padroes": {
+                "largura": 1024,
+                "altura": 1024,
+                "passos": 4,
+                "cfg": 1,
+                "amostrador": "euler"
+            },
+            "maxPassos": 12
         }
     ],
     "tradutor": {
