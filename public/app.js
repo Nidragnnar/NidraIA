@@ -4,6 +4,11 @@ const $ = (seletor) => document.querySelector(seletor);
 const el = {
     estado: $("#estado"),
     estadoTexto: $("#estado-texto"),
+    liberar: $("#liberar"),
+    promptRotulo: $("#prompt-rotulo"),
+    modos: $("#modos"),
+    modoDica: $("#modo-dica"),
+    forcaCampo: $("#forca-campo"),
     log: $("#log"),
     versao: $("#versao"),
     form: $("#form"),
@@ -98,13 +103,19 @@ const TEXTOS_ESTADO = {
     pronto: "Pronto",
     erro: "Erro no motor (clique para ver)",
     parado: "Motor parado",
+    dormindo: "Placa liberada",
 };
 
-// Consulta o estado até o motor ficar pronto (ou dar erro)
+// Consulta o estado do motor o tempo todo: rápido enquanto carrega, devagar depois
+// (assim a tela nota quando a placa de vídeo é liberada sozinha por falta de uso)
+let rodadaMotor = 0;
 async function acompanharMotor() {
+    const rodada = ++rodadaMotor;  // uma chamada nova substitui a anterior
     for (;;) {
+        let carregando = true;
         try {
             const estado = await api("/api/estado");
+            if (rodada !== rodadaMotor) return;
             el.versao.textContent = `v${estado.versao}`;
             el.traduzirOpcao.hidden = !estado.tradutor;
             atualizarRotuloGerar();
@@ -115,24 +126,38 @@ async function acompanharMotor() {
                 modeloAtivo = estado.modelo;
                 montarSeletorModelos();
                 aplicarPadroes(modeloAtual());
+                atualizarModo();
             }
             const nome = modeloAtual()?.nome || "";
             el.estado.dataset.estado = estado.estado;
             el.estadoTexto.textContent =
-                estado.estado === "pronto" ? `Pronto · ${nome}` : estado.estado === "carregando" ? `Carregando ${nome}...` : TEXTOS_ESTADO[estado.estado] || estado.estado;
-            el.log.textContent = estado.log.join("\n");
-            motorPronto = estado.estado === "pronto";
+                estado.estado === "pronto"
+                    ? `Pronto · ${nome}`
+                    : estado.estado === "dormindo"
+                      ? `Placa liberada · ${nome}`
+                      : estado.estado === "carregando"
+                        ? `Carregando ${nome}...`
+                        : TEXTOS_ESTADO[estado.estado] || estado.estado;
+            el.estado.title = estado.estado === "dormindo" ? "O modelo foi desligado para liberar a placa de vídeo. Ele religa sozinho quando você gerar." : "";
+            const log = estado.log.join("\n");
+            if (el.log.textContent !== log) el.log.textContent = log;
+            // "dormindo" ou "erro": o próximo pedido tenta religar o motor, então dá para gerar
+            motorPronto = ["pronto", "dormindo", "erro"].includes(estado.estado);
             if (estado.estado !== "carregando") trocandoModelo = false;
             atualizarBotoes();
-            if (estado.estado === "erro") el.log.hidden = false;
-            if (estado.estado !== "carregando") return;
+            if (estado.estado === "erro" && carregandoAntes) el.log.hidden = false;
+            carregando = estado.estado === "carregando";
+            carregandoAntes = carregando;
         } catch {
+            if (rodada !== rodadaMotor) return;
             el.estado.dataset.estado = "erro";
             el.estadoTexto.textContent = "Servidor desligado";
         }
-        await esperar(1500);
+        await esperar(carregando ? 1500 : 5000);
+        if (rodada !== rodadaMotor) return;
     }
 }
+let carregandoAntes = true;  // o log só abre sozinho quando o erro aparece ao carregar
 
 const modeloAtual = () => modelos.find((m) => m.id === modeloAtivo);
 
@@ -188,7 +213,19 @@ function atualizarBotoes() {
     el.cancelar.hidden = !trabalhoAtual;
     // Não deixa trocar de modelo no meio de uma geração
     el.modelo.disabled = Boolean(trabalhoAtual) || trocandoModelo;
+    el.liberar.hidden = el.estado.dataset.estado !== "pronto" || Boolean(trabalhoAtual);
 }
+
+// Desliga o modelo para devolver a memória da placa de vídeo; ele religa no próximo "Gerar"
+el.liberar.addEventListener("click", async () => {
+    try {
+        await api("/api/liberar", { method: "POST" });
+        avisar("Placa de vídeo liberada. O modelo religa sozinho quando você gerar.");
+    } catch (erro) {
+        avisar(erro.message);
+    }
+    acompanharMotor();
+});
 
 el.estado.addEventListener("click", () => {
     el.log.hidden = !el.log.hidden;
@@ -251,6 +288,36 @@ function prepararImagemBase() {
     return canvas.toDataURL("image/png");
 }
 
+// Editar com instrução: só com imagem enviada e num modelo de edição (FLUX.2 klein)
+const modoEditar = () => Boolean(imagemOriginal && modeloAtual()?.edicao && el.form.modo.value === "editar");
+const PROMPT_EXEMPLO = el.prompt.placeholder;
+
+// Ajusta a tela ao modo: no "editar" some a força e o campo do prompt vira o campo da instrução
+function atualizarModo() {
+    const podeEditar = Boolean(modeloAtual()?.edicao);
+    const editar = modoEditar();
+    el.modos.hidden = !podeEditar;
+    el.forcaCampo.hidden = editar;
+    el.modoDica.textContent = editar
+        ? 'A imagem é mantida e a IA muda só o que você pedir. Escreva a instrução lá em cima, ex.: "deixe o céu à noite" ou "coloque um chapéu de mago no gato".'
+        : podeEditar
+          ? ""
+          : 'Dica: com o modelo FLUX.2 klein dá para editar a imagem com instruções, ex.: "deixe o céu à noite".';
+    el.modoDica.hidden = !el.modoDica.textContent;
+    el.promptRotulo.textContent = editar ? "O que mudar na imagem?" : "O que você quer ver?";
+    el.prompt.placeholder = editar ? "Ex.: deixe o céu à noite, com estrelas" : PROMPT_EXEMPLO;
+}
+
+// Passa a usar esta imagem como ponto de partida
+function usarImagem(img, url, nome) {
+    imagemOriginal = img;
+    el.envioPrevia.src = url;
+    el.envioPrevia.hidden = false;
+    el.envioTexto.textContent = nome;
+    el.envioOpcoes.hidden = false;
+    atualizarModo();
+}
+
 function carregarArquivo(arquivo) {
     if (!arquivo || !/^image\/(png|jpeg|webp)$/.test(arquivo.type)) {
         avisar("Escolha uma imagem PNG, JPG ou WebP.");
@@ -258,13 +325,7 @@ function carregarArquivo(arquivo) {
     }
     const url = URL.createObjectURL(arquivo);
     const img = new Image();
-    img.onload = () => {
-        imagemOriginal = img;
-        el.envioPrevia.src = url;
-        el.envioPrevia.hidden = false;
-        el.envioTexto.textContent = arquivo.name;
-        el.envioOpcoes.hidden = false;
-    };
+    img.onload = () => usarImagem(img, url, arquivo.name);
     img.onerror = () => avisar("Não consegui abrir essa imagem.");
     img.src = url;
 }
@@ -276,7 +337,9 @@ function removerImagem() {
     el.envioPrevia.removeAttribute("src");
     el.envioTexto.textContent = "Clique ou arraste uma foto ou desenho aqui";
     el.envioOpcoes.hidden = true;
+    atualizarModo();
 }
+for (const radio of el.form.querySelectorAll("input[name=modo]")) radio.addEventListener("change", atualizarModo);
 
 el.arquivo.addEventListener("change", () => carregarArquivo(el.arquivo.files[0]));
 el.envioRemover.addEventListener("click", removerImagem);
@@ -365,7 +428,7 @@ async function gerar() {
         estilo: estiloEscolhido(),
     };
     const imagemBase = prepararImagemBase();
-    if (imagemBase) Object.assign(pedido, { imagemBase, forca: Number(el.forca.value) });
+    if (imagemBase) Object.assign(pedido, { imagemBase, forca: Number(el.forca.value), modo: modoEditar() ? "editar" : "redesenhar" });
     // Tradução já conferida: manda o inglês (talvez corrigido) e guarda o português junto
     if (traduzirAtivo() && !el.conferencia.hidden) {
         Object.assign(pedido, {
@@ -385,8 +448,12 @@ async function enviar(caminho, corpo, formato) {
     atualizarBotoes();
     iniciarAtual(formato);
     if (corpo.traduzir) el.atualStatus.textContent = "Traduzindo o prompt...";
+    // A placa estava liberada: o pedido religa o modelo antes de gerar
+    const dormia = el.estado.dataset.estado !== "pronto";
+    if (dormia) el.atualStatus.textContent = "Ligando o modelo de novo...";
     try {
         const resposta = await api(caminho, { method: "POST", body: JSON.stringify(corpo) });
+        if (dormia) acompanharMotor();
         trabalhoAtual = resposta.id;
         el.atualTraducao.hidden = !resposta.traduzido;
         el.atualTraducao.textContent = resposta.traduzido ? `Em inglês: ${resposta.prompt}` : "";
@@ -538,6 +605,7 @@ function abrir(item) {
         ["Tempo", `${item.segundos.toFixed(1)} s`],
         ["Modelo", item.modelo.replace(/\.safetensors$/, "")],
         ...(item.estiloNome ? [["Estilo", item.estiloNome]] : []),
+        ...(item.editadaPorInstrucao ? [["Editada", "a partir de outra imagem, com instrução"]] : []),
         ...(item.partiuDeImagem ? [["Partiu de", `uma imagem sua (a IA pôde mudar ${Math.round(item.forca * 100)}%)`]] : []),
         ...(item.variacaoDe ? [["Variação", `de outra imagem (força ${item.forca})`]] : []),
         ...(item.aumentadaDe ? [["Aumentada", `4× com ${upscalers.find((u) => u.id === item.upscaler)?.nome || item.upscaler}`]] : []),
@@ -581,6 +649,30 @@ $("#vis-reusar").addEventListener("click", () => {
     el.prompt.focus();
     const outroModelo = item.modelo !== modeloAtual()?.nome;
     avisar(outroModelo ? `Configurações carregadas. A imagem foi feita com ${item.modelo}: troque o modelo para repetir igual.` : "Configurações carregadas. Mesma semente = mesma imagem.");
+});
+
+// Editar com instrução: leva a imagem da galeria para "Partir de uma imagem sua" já no modo de edição
+$("#vis-editar").addEventListener("click", () => {
+    const item = abertoNoVisualizador;
+    if (!modeloAtual()?.edicao) {
+        avisar("Para editar com instruções, troque o modelo para o FLUX.2 klein.");
+        return;
+    }
+    const url = `/galeria/${item.arquivo}`;
+    const img = new Image();
+    img.onload = () => {
+        el.form.modo.value = "editar";
+        const formato = el.form.querySelector(`input[name=formato][value="${item.largura}x${item.altura}"]`);
+        if (formato) formato.checked = true;
+        usarImagem(img, url, "Imagem da galeria");
+        el.prompt.value = "";
+        fecharConferencia();
+        el.vis.close();
+        el.prompt.focus();
+        avisar("Escreva o que mudar na imagem e clique em Gerar.");
+    };
+    img.onerror = () => avisar("Não consegui abrir essa imagem.");
+    img.src = url;
 });
 
 // ========== Aumentar resolução 4× ==========

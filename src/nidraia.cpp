@@ -202,6 +202,8 @@ static std::string erroMotor;
 static std::string modeloAtivo;
 static HANDLE processoMotor = nullptr;
 static int geracaoMotor = 0;  // muda a cada troca de modelo, para ignorar avisos do motor anterior
+static bool motorDormindo = false;  // desligado para liberar a placa de vídeo; religa sozinho no próximo pedido
+static std::chrono::steady_clock::time_point ultimoUsoMotor = std::chrono::steady_clock::now();
 
 static void falharMotor(int geracao, const std::string& mensagem) {
     std::lock_guard trava(mutexMotor);
@@ -240,7 +242,7 @@ static void vigiarMotor(int geracao, HANDLE processo) {
     }
     // Avisa se o motor cair depois de pronto (numa troca de modelo a geração muda e isso é ignorado)
     WaitForSingleObject(processo, INFINITE);
-    falharMotor(geracao, "O motor parou de funcionar. Feche e abra o NidraIA de novo.");
+    falharMotor(geracao, "O motor parou de funcionar (pode ter faltado memória no computador). Clique em Gerar para ligar de novo.");
 }
 
 // Liga o motor com o modelo pedido, encerrando o anterior se houver
@@ -268,6 +270,8 @@ static void ligarMotor(const std::string& id) {
     encerrarProcesso(processoMotor);
     modeloAtivo = id;
     estadoMotor = EstadoMotor::Carregando;
+    motorDormindo = false;
+    ultimoUsoMotor = std::chrono::steady_clock::now();
     erroMotor.clear();
     registrar("[nidraia] Carregando " + (*modelo)["nome"].get<std::string>() + "...");
     try {
@@ -285,6 +289,41 @@ static void ligarMotor(const std::string& id) {
             CloseHandle(copia);
         })
         .detach();
+}
+
+// Desliga o motor para devolver a memória da placa de vídeo (para jogos, por exemplo).
+// O modelo escolhido fica lembrado e o motor religa sozinho no próximo pedido.
+static bool adormecerMotor(const std::string& motivo) {
+    std::lock_guard trava(mutexMotor);
+    if (estadoMotor != EstadoMotor::Pronto) return false;
+    geracaoMotor++;  // o vigia do motor ignora o encerramento
+    encerrarProcesso(processoMotor);
+    estadoMotor = EstadoMotor::Parado;
+    motorDormindo = true;
+    registrar("[nidraia] Placa de vídeo liberada (" + motivo + "). O modelo religa sozinho quando você gerar.");
+    return true;
+}
+
+// Marca o uso do motor e, se ele estava dormindo (ou tinha caído), religa e espera ficar pronto
+static void acordarMotor() {
+    static std::mutex mutexAcordar;  // dois pedidos juntos não ligam o motor duas vezes
+    std::lock_guard umPorVez(mutexAcordar);
+    std::string modelo;
+    {
+        std::lock_guard trava(mutexMotor);
+        ultimoUsoMotor = std::chrono::steady_clock::now();
+        bool caiu = estadoMotor == EstadoMotor::Erro && !modeloAtivo.empty();
+        if (!motorDormindo && !caiu) return;
+        modelo = modeloAtivo;
+    }
+    ligarMotor(modelo);
+    for (int tentativa = 0; tentativa < 240; tentativa++) {
+        {
+            std::lock_guard trava(mutexMotor);
+            if (estadoMotor != EstadoMotor::Carregando) return;
+        }
+        std::this_thread::sleep_for(500ms);
+    }
 }
 
 static httplib::Client clienteMotor() {
@@ -417,6 +456,8 @@ struct Trabalho {
     std::string idMotor;     // id atual no motor (vazio enquanto o motor recarrega para tentar de novo)
     bool refeito = false;    // já tentou de novo depois de faltar memória
     bool cancelado = false;  // cancelado enquanto o motor recarregava
+    // Última vez que a tela perguntou por ele; se a página fechar, o NidraIA mesmo recolhe o resultado
+    std::chrono::steady_clock::time_point ultimaConsulta = std::chrono::steady_clock::now();
 };
 static std::map<std::string, Trabalho> pedidos;  // id do trabalho → trabalho
 
@@ -509,7 +550,7 @@ static json montarPedido(const json& corpo, const json& modelo) {
     return pedido;
 }
 
-static json paraMotor(const json& pedido, const std::string& imagemBase = "", double forca = 0) {
+static json paraMotor(const json& pedido, const std::string& imagemBase = "", double forca = 0, bool editar = false) {
     json motor = {
         {"prompt", pedido["prompt"]},
         {"negative_prompt", pedido["negativo"]},
@@ -525,6 +566,11 @@ static json paraMotor(const json& pedido, const std::string& imagemBase = "", do
         {"preview_interval", 1},
         {"output_format", "png"},
     };
+    // Editar por instrução (FLUX.2 klein): a imagem vai como referência e o prompt diz o que mudar
+    if (editar) {
+        motor["ref_images"] = json::array({imagemBase});
+        return motor;
+    }
     // Imagem para imagem: parte de uma imagem existente; "strength" diz o quanto ela pode mudar
     if (!imagemBase.empty()) {
         motor["init_image"] = imagemBase;
@@ -672,6 +718,7 @@ static json listaModelos() {
         lista.push_back({{"id", modelo["id"]},
                          {"nome", modelo["nome"]},
                          {"descricao", modelo["descricao"]},
+                         {"edicao", modelo.value("edicao", false)},
                          {"licenca", modelo["licenca"]},
                          {"padroes", modelo["padroes"]},
                          {"maxPassos", modelo["maxPassos"]},
@@ -706,7 +753,8 @@ static bool faltouMemoria() {
 }
 
 static const char* SEM_MEMORIA =
-    "A placa de vídeo ficou sem memória. Feche jogos ou programas pesados, ou gere menos imagens por vez, e tente de novo.";
+    "Faltou memória (da placa de vídeo ou do computador). Feche jogos e programas pesados, veja se o disco do Windows "
+    "não está cheio, ou gere menos imagens por vez, e tente de novo.";
 
 // Troca a mensagem técnica do motor por uma explicação, olhando o log recente
 static std::string explicarFalha(const std::string& mensagem) {
@@ -734,9 +782,85 @@ static json listaUpscalers() {
     return lista;
 }
 
+static bool terminou(const std::string& status) {
+    return status == "completed" || status == "failed" || status == "cancelled";
+}
+
+// Tira o trabalho da lista e, se deu certo, salva as imagens na galeria.
+// Só quem tira da lista salva, então a mesma imagem nunca é salva duas vezes.
+static json concluirTrabalho(const std::string& id, const json& t) {
+    json pedido;
+    {
+        std::lock_guard trava(mutexPedidos);
+        auto encontrado = pedidos.find(id);
+        if (encontrado == pedidos.end()) return nullptr;
+        pedido = encontrado->second.pedido;
+        pedidos.erase(encontrado);
+    }
+    if (t.value("status", "") == "completed") return salvarImagens(t, pedido);
+    return nullptr;
+}
+
+static void esquecerTrabalho(const std::string& id) {
+    std::lock_guard trava(mutexPedidos);
+    pedidos.erase(id);
+}
+
+// Trabalhos que a tela parou de acompanhar (página fechada no meio da geração): quando o motor termina,
+// salva as imagens e tira da lista. Sem isso a troca de modelo ficaria bloqueada até reiniciar o NidraIA.
+static void recolherAbandonados() {
+    std::vector<std::pair<std::string, std::string>> parados;  // id da tela, id no motor
+    {
+        std::lock_guard trava(mutexPedidos);
+        auto agora = std::chrono::steady_clock::now();
+        for (const auto& [id, trabalho] : pedidos)
+            if (agora - trabalho.ultimaConsulta > 10s) parados.emplace_back(id, trabalho.idMotor);
+    }
+    for (const auto& [id, idMotor] : parados) {
+        EstadoMotor estado;
+        {
+            std::lock_guard trava(mutexMotor);
+            estado = estadoMotor;
+        }
+        if (estado == EstadoMotor::Carregando) continue;
+        // Motor parado, ou esperando uma nova tentativa que ninguém mais acompanha: o trabalho se perdeu
+        if (estado != EstadoMotor::Pronto || idMotor.empty()) {
+            esquecerTrabalho(id);
+            continue;
+        }
+        try {
+            json t = chamarMotor("GET", "/sdcpp/v1/jobs/" + idMotor);
+            if (!terminou(t.value("status", ""))) continue;  // ainda gerando: continua valendo
+            if (!concluirTrabalho(id, t).is_null())
+                registrar("[nidraia] Uma geração terminou sem a página aberta; a imagem foi salva na galeria.");
+        } catch (const ErroHttp& erro) {
+            if (erro.status == 404) esquecerTrabalho(id);  // o motor não conhece mais esse trabalho
+        } catch (const std::exception&) {
+            // falha passageira (disco, resposta estranha): tenta de novo na próxima vez
+        }
+    }
+}
+
 static bool temGeracaoEmAndamento() {
+    recolherAbandonados();
     std::lock_guard trava(mutexPedidos);
     return !pedidos.empty();
+}
+
+// A cada 30 s: recolhe trabalhos abandonados e libera a placa de vídeo se o motor ficou sem uso
+static void zelarMotor() {
+    for (;;) {
+        std::this_thread::sleep_for(30s);
+        if (temGeracaoEmAndamento()) continue;
+        int minutos = config.value("liberarPlacaAposMinutos", 10);
+        if (minutos <= 0) continue;  // 0 desliga a liberação automática
+        bool ocioso;
+        {
+            std::lock_guard trava(mutexMotor);
+            ocioso = estadoMotor == EstadoMotor::Pronto && std::chrono::steady_clock::now() - ultimoUsoMotor > std::chrono::minutes(minutos);
+        }
+        if (ocioso) adormecerMotor(std::format("{} min sem uso", minutos));
+    }
 }
 
 static const std::regex ID_TRABALHO{"^[A-Za-z0-9_-]{1,80}$"};
@@ -747,7 +871,7 @@ static void configurarRotas(httplib::Server& servidor) {
         json estado;
         {
             std::lock_guard trava(mutexMotor);
-            estado = {{"estado", nomeEstado(estadoMotor)},
+            estado = {{"estado", motorDormindo && estadoMotor == EstadoMotor::Parado ? "dormindo" : nomeEstado(estadoMotor)},
                       {"erro", erroMotor.empty() ? json(nullptr) : json(erroMotor)},
                       {"modelo", modeloAtivo}};
         }
@@ -769,6 +893,13 @@ static void configurarRotas(httplib::Server& servidor) {
         responderJson(res, 202, {{"modelo", id}});
     });
 
+    // Desliga o motor agora para devolver a memória da placa de vídeo; ele religa no próximo pedido
+    servidor.Post("/api/liberar", [](const httplib::Request&, httplib::Response& res) {
+        if (temGeracaoEmAndamento()) throw ErroHttp(409, "Espere a geração atual terminar.");
+        if (!adormecerMotor("pedido pela tela")) throw ErroHttp(409, "O motor não está ligado.");
+        responderJson(res, 200, {{"estado", "dormindo"}});
+    });
+
     servidor.Post("/api/traduzir", [](const httplib::Request& req, httplib::Response& res) {
         std::string original = texto(lerCorpo(req), "texto");
         if (original.empty()) throw ErroHttp(422, "Escreva algo para traduzir.");
@@ -777,6 +908,7 @@ static void configurarRotas(httplib::Server& servidor) {
 
     servidor.Post("/api/gerar", [](const httplib::Request& req, httplib::Response& res) {
         json corpo = lerCorpo(req, 25'000'000);
+        acordarMotor();
         const json& modelo = modeloProntoOuErro();
 
         // Imagem enviada pela tela (opcional): "data:image/png;base64,..." já no tamanho escolhido
@@ -786,14 +918,22 @@ static void configurarRotas(httplib::Server& servidor) {
             if (!imagemBase.starts_with("data:image/png;base64,") && !imagemBase.starts_with("data:image/jpeg;base64,"))
                 throw ErroHttp(422, "A imagem enviada precisa ser PNG ou JPG.");
         }
+        // "editar": a imagem enviada é mantida e o prompt diz o que mudar nela (só em modelos de edição)
+        bool editar = texto(corpo, "modo") == "editar";
+        if (editar && imagemBase.empty()) throw ErroHttp(422, "Envie a imagem que você quer editar.");
+        if (editar && !modelo.value("edicao", false))
+            throw ErroHttp(422, "Este modelo não edita com instruções. Troque o modelo para o FLUX.2 klein.");
+
         json pedido = montarPedido(corpo, modelo);
         pedido["modelo"] = modelo["nome"];
         double forca = numero(corpo, "forca", 0.1, 1.0, 0.6);
-        if (!imagemBase.empty()) {
+        if (editar) {
+            pedido["editadaPorInstrucao"] = true;
+        } else if (!imagemBase.empty()) {
             pedido["partiuDeImagem"] = true;
             pedido["forca"] = forca;
         }
-        std::string id = enfileirar(pedido, paraMotor(pedido, imagemBase, forca));
+        std::string id = enfileirar(pedido, paraMotor(pedido, imagemBase, forca, editar));
         responderJson(res, 202, {{"id", id}, {"prompt", pedido["prompt"]}, {"traduzido", pedido["traduzido"]}});
     });
 
@@ -808,6 +948,7 @@ static void configurarRotas(httplib::Server& servidor) {
         if (std::none_of(disponiveis.begin(), disponiveis.end(), [&](const json& u) { return u["id"] == upscaler; }))
             throw ErroHttp(404, "Modelo de aumento desconhecido.");
         if (temGeracaoEmAndamento()) throw ErroHttp(409, "Espere a geração atual terminar.");
+        acordarMotor();
 
         json original;
         for (const auto& item : listarGaleria())
@@ -822,6 +963,10 @@ static void configurarRotas(httplib::Server& servidor) {
         json resultado = chamarMotor("POST", "/sdcpp/v1/upscale",
                                      {{"image", imagem}, {"upscaler", upscaler}, {"output_format", "png"}});
         double segundos = std::chrono::duration<double>(std::chrono::steady_clock::now() - inicio).count();
+        {
+            std::lock_guard trava(mutexMotor);
+            ultimoUsoMotor = std::chrono::steady_clock::now();
+        }
 
         // Salva ao lado da original, com as mesmas informações e a marca do aumento
         std::string dia = diaLocal();
@@ -854,6 +999,7 @@ static void configurarRotas(httplib::Server& servidor) {
             if (item["id"] == idImagem) original = item;
         if (original.is_null()) throw ErroHttp(404, "Imagem não encontrada.");
 
+        acordarMotor();
         const json& modelo = modeloProntoOuErro();
         json base = {
             {"prompt", original["prompt"]},
@@ -888,6 +1034,7 @@ static void configurarRotas(httplib::Server& servidor) {
             auto encontrado = pedidos.find(id);
             if (encontrado != pedidos.end()) {
                 auto& trabalho = encontrado->second;
+                trabalho.ultimaConsulta = std::chrono::steady_clock::now();
                 cancelado = trabalho.cancelado;
                 esperandoMotor = trabalho.idMotor.empty();
                 if (esperandoMotor) corpoReenvio = trabalho.corpoMotor;
@@ -896,6 +1043,21 @@ static void configurarRotas(httplib::Server& servidor) {
             }
         }
         if (cancelado) return responderJson(res, 200, {{"status", "cancelled"}});
+        bool motorCaiu;
+        {
+            // Enquanto a tela acompanha uma geração, o motor conta como em uso
+            std::lock_guard trava(mutexMotor);
+            ultimoUsoMotor = std::chrono::steady_clock::now();
+            motorCaiu = estadoMotor == EstadoMotor::Erro || estadoMotor == EstadoMotor::Parado;
+        }
+        // O motor caiu no meio da geração: o trabalho se perdeu
+        if (motorCaiu && !esperandoMotor) {
+            esquecerTrabalho(id);
+            return responderJson(res, 200,
+                                 {{"status", "failed"},
+                                  {"erro", "O motor parou no meio da geração. Pode ter faltado memória no computador: feche "
+                                           "programas pesados e clique em Gerar de novo."}});
+        }
         if (esperandoMotor) {
             EstadoMotor estado;
             {
@@ -967,17 +1129,9 @@ static void configurarRotas(httplib::Server& servidor) {
         if (t.contains("error") && t["error"].is_object()) resposta["erro"] = explicarFalha(t["error"].value("message", ""));
 
         // Ao terminar, salva na galeria uma vez só
-        if (status == "completed" || status == "failed" || status == "cancelled") {
-            json pedido;
-            {
-                std::lock_guard trava(mutexPedidos);
-                auto encontrado = pedidos.find(id);
-                if (encontrado != pedidos.end()) {
-                    pedido = encontrado->second.pedido;
-                    pedidos.erase(encontrado);
-                }
-            }
-            if (status == "completed" && !pedido.is_null()) resposta["imagens"] = salvarImagens(t, pedido);
+        if (terminou(status)) {
+            json imagens = concluirTrabalho(id, t);
+            if (!imagens.is_null()) resposta["imagens"] = imagens;
         }
         responderJson(res, 200, resposta);
     });
@@ -1112,6 +1266,7 @@ int main(int argc, char** argv) {
     }
 
     std::thread(desligarTradutorOcioso).detach();
+    std::thread(zelarMotor).detach();
     if (abrirNavegador) ShellExecuteA(nullptr, "open", endereco.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     servidor.listen_after_bind();
     TerminateJobObject(jobFilhos, 0);

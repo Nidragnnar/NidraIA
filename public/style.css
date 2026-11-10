@@ -1061,3 +1061,52 @@ select:disabled {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+/* ========== NidraIA 0.6: liberar a placa e editar com instrução ========== */
+.topo-acoes {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.botao-topo {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    border: 1px solid var(--cor-borda);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--cor-texto-suave);
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.botao-topo:hover {
+    border-color: var(--cor-ouro);
+    color: var(--cor-ouro-claro);
+}
+
+/* Placa liberada: luz roxa parada (o modelo religa sozinho) */
+.estado[data-estado="dormindo"] .luz {
+    background: var(--cor-roxo-2);
+    animation: none;
+}
+
+.dica {
+    display: block;
+    color: var(--cor-texto-suave);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 560px) {
+    .botao-topo {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+
+    .marca .versao {
+        display: none;
+    }
+}

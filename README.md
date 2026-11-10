@@ -13,9 +13,12 @@ Gerador de imagens com IA que roda **no seu próprio computador**, de graça e s
 - **Estilos prontos**: Foto realista, Cinema, Anime, Aquarela, Pintura a óleo, Pixel art, Animação 3D e Fantasia sombria. Eles acrescentam termos em inglês ao prompt (lista editável no `config.json`)
 - **Partir de uma imagem sua**: envie uma foto ou desenho e escolha o quanto a IA pode mudar
 - **Aumentar resolução 4×** com [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (512 → 2048 em poucos segundos), com um modelo para fotos e outro para anime e ilustração
+- **Editar com instrução** (FLUX.2 klein): envie uma imagem, ou escolha uma da galeria, e escreva o que mudar ("deixe o céu à noite"); o resto da imagem é mantido
 - **Gerar 4 variações** de uma imagem da galeria: mesma cena, detalhes diferentes (imagem para imagem com força 0,45)
 - 1 a 4 imagens por vez, com prévia, barra de progresso e botão de cancelar
 - Se faltar memória na placa de vídeo (um jogo aberto depois que o modelo carregou, por exemplo), o NidraIA recarrega o modelo e tenta mais uma vez sozinho
+- **Libera a placa de vídeo quando está parado**: depois de 10 minutos sem uso (`liberarPlacaAposMinutos` no `config.json`; 0 desliga), ou pelo botão **Liberar placa**, o modelo é desligado e a memória volta para os jogos. Ele religa sozinho no próximo "Gerar"
+- Se a página for fechada no meio de uma geração, a imagem é salva na galeria mesmo assim
 - Formatos quadrado, retrato, paisagem e grande
 - Semente (seed) salva em cada imagem: **Reutilizar configurações** repete ou varia uma imagem
 - Galeria salva na pasta `galeria/`, com um `.json` ao lado de cada imagem (prompt original, prompt em inglês e configurações)
@@ -109,6 +112,8 @@ Medido com outros programas ocupando cerca de 3,3 GB da placa de vídeo (Windows
 | FLUX.2 klein 4B (4 passos) | 11 s | 24 a 26 s | acertou |
 
 O tradutor ocupa cerca de 2,5 GB de RAM e se desliga sozinho depois de 5 minutos sem uso (`desligarAposMinutos` no `config.json`).
+
+Além da placa de vídeo, os modelos precisam de memória do Windows (RAM mais arquivo de paginação): se o disco do Windows estiver cheio, o arquivo de paginação não cresce e a geração falha por falta de memória mesmo com a placa livre.
 
 ## Como funciona
 

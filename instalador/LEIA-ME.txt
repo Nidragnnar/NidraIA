@@ -41,6 +41,12 @@ DICAS
   FLUX.1 schnell: bonito, mas o mais lento.
 - Quer um texto escrito na imagem (placa, letreiro)? Use o FLUX.2 klein
   ou o Z-Image e escreva o texto entre aspas, ex.: uma placa escrita "BAR DO ZE".
+- Com o FLUX.2 klein da para EDITAR uma imagem: clique numa imagem da
+  galeria, depois em "Editar com instrucao", e escreva o que mudar
+  (ex.: "deixe o ceu a noite"). O resto da imagem e mantido.
+- Vai jogar? Clique em "Liberar placa" no topo: o NidraIA devolve a
+  memoria da placa de video e religa sozinho quando voce gerar de novo.
+  Depois de 10 minutos parado ele faz isso sozinho.
 - Clique numa imagem e use "Aumentar 4x" para deixa-la grande e nitida,
   ou "Gerar 4 variacoes" para ganhar versoes parecidas.
 
@@ -48,6 +54,9 @@ SE DER PROBLEMA
 - "A porta 3333 ja esta em uso": o NidraIA ja esta aberto em outra
   janela preta. Feche ela antes.
 - Bolinha vermelha: clique nela para ver o que aconteceu.
+- "Faltou memoria": feche jogos e programas pesados. Veja tambem se o
+  disco do Windows (C:) nao esta cheio: com ele cheio o NidraIA nao
+  consegue gerar, mesmo com a placa de video livre.
 - O Windows pode avisar que o programa e desconhecido (SmartScreen).
   Clique em "Mais informacoes" e "Executar assim mesmo".
 

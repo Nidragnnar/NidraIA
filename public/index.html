@@ -17,10 +17,14 @@
             <span class="nome">Nidra<b>IA</b></span>
             <span id="versao" class="versao"></span>
         </h1>
-        <button type="button" id="estado" class="estado" data-estado="carregando" aria-expanded="false" aria-controls="log">
-            <span class="luz" aria-hidden="true"></span>
-            <span id="estado-texto">Ligando o motor...</span>
-        </button>
+        <div class="topo-acoes">
+            <button type="button" id="liberar" class="botao-topo" hidden
+                title="Desliga o modelo para devolver a memória da placa de vídeo (bom antes de abrir um jogo). Ele religa sozinho quando você gerar.">Liberar placa</button>
+            <button type="button" id="estado" class="estado" data-estado="carregando" aria-expanded="false" aria-controls="log">
+                <span class="luz" aria-hidden="true"></span>
+                <span id="estado-texto">Ligando o motor...</span>
+            </button>
+        </div>
     </header>
 
     <pre id="log" class="log" hidden></pre>
@@ -36,7 +40,7 @@
             </label>
 
             <label class="campo">
-                <span>O que você quer ver?</span>
+                <span id="prompt-rotulo">O que você quer ver?</span>
                 <textarea id="prompt" rows="5" maxlength="2000" required
                     placeholder="Ex.: um gato astronauta flutuando no espaço, arte digital, cores vibrantes"></textarea>
             </label>
@@ -77,7 +81,13 @@
                     <img id="envio-previa" alt="Imagem escolhida" hidden>
                 </label>
                 <div id="envio-opcoes" class="envio-opcoes" hidden>
-                    <label class="campo">
+                    <!-- Só aparece em modelos que editam com instruções (FLUX.2 klein) -->
+                    <div class="estilos" id="modos" hidden>
+                        <label><input type="radio" name="modo" value="redesenhar" checked><span>Redesenhar parecida</span></label>
+                        <label><input type="radio" name="modo" value="editar"><span>Editar com instrução</span></label>
+                    </div>
+                    <small id="modo-dica" class="dica"></small>
+                    <label class="campo" id="forca-campo">
                         <span>Quanto a IA pode mudar <output id="forca-valor"></output></span>
                         <input id="forca" type="range" min="0.2" max="0.95" step="0.05" value="0.6">
                         <small>Pouco mantém a sua imagem; muito usa ela só como ponto de partida. Descreva no prompt o que aparece nela (ex.: "um dragão dourado voando à noite").</small>
@@ -171,6 +181,7 @@
                 <dl id="vis-dados" class="vis-dados"></dl>
                 <div class="vis-acoes">
                     <button type="button" class="botao" id="vis-variacoes" title="Gera 4 imagens parecidas com esta">Gerar 4 variações</button>
+                    <button type="button" class="botao botao-secundario" id="vis-editar" title="Mantém a imagem e muda só o que você pedir (FLUX.2 klein)">Editar com instrução</button>
                     <div class="aumentar" id="vis-aumentar-grupo" hidden>
                         <select id="vis-upscaler" aria-label="Tipo de imagem para aumentar"></select>
                         <button type="button" class="botao botao-secundario" id="vis-aumentar">Aumentar 4×</button>
