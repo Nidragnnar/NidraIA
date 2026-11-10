@@ -1,19 +1,38 @@
-/* ========== Variáveis ========== */
+/* ========== Variáveis: roxo de dragão com o dourado da moeda (mesmas cores do Septim-Finance, tema escuro) ========== */
 :root {
-    --cor-fundo: #0e0e12;
-    --cor-painel: #17171d;
-    --cor-campo: #1f1f27;
-    --cor-borda: #2c2c36;
-    --cor-texto: #ececf1;
-    --cor-texto-suave: #9a9aa8;
-    --cor-destaque: #ff7a59;
-    --cor-destaque-2: #ffb347;
-    --cor-erro: #ff6b6b;
-    --cor-ok: #4ade80;
-    --cor-aviso: #fbbf24;
+    --cor-fundo: #0f0b16;
+    --cor-painel: #18121f;
+    --cor-campo: #1e1728;
+    --cor-borda: #2e2540;
+    --cor-borda-suave: #251d33;
+    --cor-texto: #ece6f8;
+    --cor-texto-suave: #a89ec0;
+    --cor-texto-fraco: #766c8e;
 
-    --raio: 12px;
-    --fonte: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --cor-roxo-fundo: #24123f;
+    --cor-roxo: #7c4ddb;
+    --cor-roxo-2: #9a75e8;
+    --cor-roxo-selecao: #2a1f40;
+    --cor-roxo-claro: #bfa3f5;
+    --cor-roxo-mudo: #a994d2;
+    --cor-ouro: #e6be5c;
+    --cor-ouro-claro: #f3d891;
+    --cor-ouro-fundo: #2e2614;
+    --degrade-ouro: linear-gradient(135deg, var(--cor-ouro-claro), var(--cor-ouro) 55%, #b88a2c);
+
+    /* Nomes antigos, usados no resto do arquivo */
+    --cor-destaque: var(--cor-roxo);
+    --cor-destaque-2: var(--cor-roxo-2);
+
+    --cor-erro: #ee8478;
+    --cor-ok: #5fc995;
+    --cor-aviso: #e0ae4c;
+
+    --sombra: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px -14px rgba(0, 0, 0, 0.6);
+    --altura-topo: 68px;
+    --raio: 14px;
+    --fonte: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --fonte-marca: Cinzel, Georgia, "Times New Roman", serif;
     color-scheme: dark;
 }
 
@@ -36,6 +55,7 @@ body {
     line-height: 1.5;
     color: var(--cor-texto);
     background: var(--cor-fundo);
+    -webkit-font-smoothing: antialiased;
 }
 
 h1,
@@ -54,23 +74,66 @@ code {
     padding: 1px 6px;
     border-radius: 6px;
     background: var(--cor-campo);
+    color: var(--cor-ouro-claro);
+}
+
+::selection {
+    background: color-mix(in srgb, var(--cor-ouro) 40%, transparent);
+}
+
+/* Barras de rolagem roxas */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cor-borda) transparent;
 }
 
 /* ========== Topo ========== */
 .topo {
+    position: sticky;
+    top: 0;
+    z-index: 10;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--cor-borda);
+    height: var(--altura-topo);
+    padding: 0 24px;
+    background: color-mix(in srgb, var(--cor-fundo) 82%, transparent);
+    backdrop-filter: blur(10px);
+}
+
+/* Fio dourado embaixo do topo */
+.topo::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cor-ouro) 30%, var(--cor-ouro) 70%, transparent);
+    opacity: 0.55;
 }
 
 .marca {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 1.15rem;
+    gap: 12px;
+    font-family: var(--fonte-marca);
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.marca img {
+    border-radius: 10px;
+    filter: drop-shadow(0 0 10px rgba(230, 190, 92, 0.25));
+}
+
+.marca b {
+    background: var(--degrade-ouro);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
 }
 
 .estado {
@@ -78,14 +141,19 @@ code {
     align-items: center;
     gap: 8px;
     min-width: 0;
-    padding: 6px 14px;
-    border: 1px solid var(--cor-borda);
+    padding: 7px 16px;
+    border: 1px solid color-mix(in srgb, var(--cor-ouro) 35%, var(--cor-borda));
     border-radius: 999px;
     background: var(--cor-painel);
     color: var(--cor-texto-suave);
     font: inherit;
     font-size: 0.9rem;
     cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.estado:hover {
+    border-color: var(--cor-roxo);
 }
 
 .estado span:last-child {
@@ -105,6 +173,7 @@ code {
 
 .estado[data-estado="pronto"] .luz {
     background: var(--cor-ok);
+    box-shadow: 0 0 8px var(--cor-ok);
     animation: none;
 }
 
@@ -122,10 +191,10 @@ code {
 .log {
     max-height: 220px;
     margin: 0;
-    padding: 12px 20px;
+    padding: 12px 24px;
     overflow: auto;
-    background: #000;
-    color: #b8b8c4;
+    background: #07040d;
+    color: #bdb2d4;
     font-size: 0.78rem;
     white-space: pre-wrap;
     border-bottom: 1px solid var(--cor-borda);
@@ -134,22 +203,66 @@ code {
 /* ========== Layout ========== */
 .layout {
     display: grid;
-    grid-template-columns: 340px minmax(0, 1fr);
+    grid-template-columns: 380px minmax(0, 1fr);
     gap: 24px;
-    padding: 20px;
+    max-width: 1800px;
+    margin: 0 auto;
+    padding: 24px;
     align-items: start;
 }
 
+/* O painel rola sozinho e o botão Gerar fica sempre visível embaixo */
 .painel {
     position: sticky;
-    top: 20px;
+    top: calc(var(--altura-topo) + 20px);
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
-    padding: 20px;
+    max-height: calc(100vh - var(--altura-topo) - 40px);
+    overflow-y: auto;
+    padding: 20px 20px 0;
     background: var(--cor-painel);
     border: 1px solid var(--cor-borda);
-    border-radius: 16px;
+    border-top: 2px solid color-mix(in srgb, var(--cor-ouro) 60%, transparent);
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
+}
+
+/* Títulos das seções do formulário */
+.secao {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cor-ouro);
+}
+
+.secao:first-child {
+    margin-top: 0;
+}
+
+.secao span {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--degrade-ouro);
+    color: #1a1208;
+    font-size: 0.75rem;
+    letter-spacing: 0;
+}
+
+/* Linha que separa uma seção da outra */
+.secao::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--cor-ouro) 45%, transparent), transparent);
 }
 
 /* ========== Campos ========== */
@@ -166,6 +279,7 @@ code {
 .campo legend {
     display: flex;
     justify-content: space-between;
+    gap: 6px;
     padding: 0;
     margin-bottom: 6px;
     font-weight: 600;
@@ -190,7 +304,7 @@ summary em {
 }
 
 output {
-    color: var(--cor-destaque);
+    color: var(--cor-ouro);
     font-weight: 700;
 }
 
@@ -204,23 +318,33 @@ select {
     background: var(--cor-campo);
     color: var(--cor-texto);
     font: inherit;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 textarea {
     resize: vertical;
 }
 
+textarea::placeholder,
+input::placeholder {
+    color: color-mix(in srgb, var(--cor-texto-suave) 75%, transparent);
+}
+
 textarea:focus,
 input:focus,
 select:focus {
     outline: none;
-    border-color: var(--cor-destaque);
+    border-color: var(--cor-roxo);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--cor-roxo) 22%, transparent);
+}
+
+select option {
+    background: var(--cor-campo);
 }
 
 input[type="range"] {
     width: 100%;
-    accent-color: var(--cor-destaque);
+    accent-color: var(--cor-roxo);
 }
 
 .duas {
@@ -229,10 +353,21 @@ input[type="range"] {
     gap: 12px;
 }
 
+.extra {
+    padding: 10px 12px;
+    border: 1px solid var(--cor-borda);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--cor-campo) 50%, transparent);
+}
+
 .extra summary {
     font-weight: 600;
     font-size: 0.92rem;
     cursor: pointer;
+}
+
+.extra summary::marker {
+    color: var(--cor-ouro);
 }
 
 .extra[open] {
@@ -268,15 +403,21 @@ input[type="range"] {
     font-size: 0.75rem;
     color: var(--cor-texto-suave);
     cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.formatos span:hover {
+    border-color: var(--cor-roxo);
 }
 
 .formatos input:checked + span {
-    border-color: var(--cor-destaque);
-    color: var(--cor-texto);
+    border-color: var(--cor-roxo);
+    color: var(--cor-roxo-claro);
+    background: var(--cor-roxo-selecao);
 }
 
 .formatos input:focus-visible + span {
-    outline: 3px solid var(--cor-destaque);
+    outline: 2px solid var(--cor-roxo);
     outline-offset: 2px;
 }
 
@@ -301,9 +442,15 @@ input[type="range"] {
 }
 
 /* ========== Botões ========== */
+/* Fica grudado no fim do painel, sempre visível */
 .acoes {
+    position: sticky;
+    bottom: 0;
     display: flex;
     gap: 10px;
+    margin: 0 -20px;
+    padding: 14px 20px 18px;
+    background: linear-gradient(180deg, transparent, var(--cor-painel) 30%);
 }
 
 .botao {
@@ -314,21 +461,24 @@ input[type="range"] {
     padding: 12px 18px;
     border: 0;
     border-radius: 10px;
-    background: linear-gradient(135deg, var(--cor-destaque-2), var(--cor-destaque));
-    color: #1a0f0a;
+    background: var(--cor-roxo);
+    color: #fff;
     font: inherit;
-    font-weight: 800;
+    font-weight: 700;
     text-decoration: none;
     cursor: pointer;
-    transition: filter 0.2s, transform 0.1s;
+    box-shadow: 0 10px 24px -8px rgba(106, 63, 191, 0.7);
+    transition: filter 0.2s, transform 0.1s, box-shadow 0.2s;
 }
 
 .acoes .botao:first-child {
     flex: 1;
+    padding: 14px 18px;
+    font-size: 1.05rem;
 }
 
 .botao:hover {
-    filter: brightness(1.08);
+    filter: brightness(1.1);
 }
 
 .botao:active {
@@ -338,13 +488,14 @@ input[type="range"] {
 .botao:disabled {
     opacity: 0.45;
     cursor: not-allowed;
-    filter: none;
+    filter: grayscale(0.4);
+    box-shadow: none;
 }
 
 .botao kbd {
     padding: 1px 6px;
     border-radius: 5px;
-    background: rgba(0, 0, 0, 0.15);
+    background: rgba(255, 255, 255, 0.16);
     font: inherit;
     font-size: 0.72rem;
     font-weight: 700;
@@ -354,28 +505,42 @@ input[type="range"] {
     background: var(--cor-campo);
     color: var(--cor-texto);
     border: 1.5px solid var(--cor-borda);
+    box-shadow: none;
+}
+
+.botao-secundario:hover {
+    border-color: var(--cor-roxo);
+    box-shadow: none;
 }
 
 .botao-perigo {
     background: none;
     color: var(--cor-erro);
     border: 1.5px solid color-mix(in srgb, var(--cor-erro) 45%, transparent);
+    box-shadow: none;
+}
+
+.botao-perigo:hover {
+    background: color-mix(in srgb, var(--cor-erro) 10%, transparent);
+    box-shadow: none;
 }
 
 /* ========== Resultado atual ========== */
 .resultados {
     display: grid;
-    gap: 18px;
+    gap: 20px;
     min-width: 0;
 }
 
 .atual {
     display: grid;
     gap: 12px;
-    padding: 16px;
-    background: var(--cor-painel);
-    border: 1px solid var(--cor-borda);
-    border-radius: 16px;
+    padding: 18px;
+    /* Cartão de destaque, como o do Septim: roxo profundo com borda dourada */
+    background: radial-gradient(130% 160% at 100% 0%, #4a2788 0%, var(--cor-roxo-fundo) 55%, #170b29 100%);
+    border: 1px solid rgba(224, 180, 76, 0.25);
+    border-radius: var(--raio);
+    box-shadow: var(--sombra);
 }
 
 .atual-topo {
@@ -383,9 +548,13 @@ input[type="range"] {
     gap: 8px;
 }
 
+#atual-status {
+    font-weight: 600;
+}
+
 .barra {
-    height: 4px;
-    border-radius: 2px;
+    height: 5px;
+    border-radius: 3px;
     background: var(--cor-borda);
     overflow: hidden;
 }
@@ -394,19 +563,19 @@ input[type="range"] {
     display: block;
     width: 0;
     height: 100%;
-    background: linear-gradient(90deg, var(--cor-destaque-2), var(--cor-destaque));
+    background: linear-gradient(90deg, var(--cor-roxo), var(--cor-roxo-2));
     transition: width 0.3s;
 }
 
 .grade-atual {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 12px;
 }
 
 .carregando {
-    border-radius: 10px;
-    background: linear-gradient(110deg, var(--cor-campo) 30%, var(--cor-borda) 50%, var(--cor-campo) 70%);
+    border-radius: 12px;
+    background: linear-gradient(110deg, var(--cor-campo) 30%, color-mix(in srgb, var(--cor-roxo) 35%, var(--cor-campo)) 50%, var(--cor-campo) 70%);
     background-size: 250% 100%;
     animation: brilho 1.4s linear infinite;
 }
@@ -426,25 +595,39 @@ input[type="range"] {
 
 /* ========== Galeria ========== */
 .galeria-topo h2 {
-    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.15rem;
+}
+
+/* Losango dourado antes do título */
+.galeria-topo h2::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    background: var(--degrade-ouro);
+    transform: rotate(45deg);
 }
 
 .galeria {
-    columns: 4 220px;
-    column-gap: 12px;
+    columns: 4 230px;
+    column-gap: 14px;
 }
 
 .miniatura {
+    position: relative;
     display: block;
     width: 100%;
-    margin: 0 0 12px;
+    margin: 0 0 14px;
     padding: 0;
-    border: 0;
-    border-radius: 10px;
+    border: 1px solid var(--cor-borda);
+    border-radius: 12px;
     overflow: hidden;
     background: var(--cor-campo);
     cursor: zoom-in;
     break-inside: avoid;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .miniatura img {
@@ -453,6 +636,38 @@ input[type="range"] {
     height: 100%;
     object-fit: cover;
     transition: transform 0.3s;
+}
+
+/* Ao passar o mouse: borda dourada e o prompt por cima da imagem */
+.miniatura::after {
+    content: attr(title);
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    padding: 28px 12px 10px;
+    background: linear-gradient(180deg, transparent, rgba(14, 8, 24, 0.92));
+    color: var(--cor-texto);
+    font: inherit;
+    font-size: 0.8rem;
+    text-align: left;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.miniatura:hover,
+.miniatura:focus-visible {
+    border-color: var(--cor-ouro);
+    box-shadow: 0 10px 24px -8px rgba(106, 63, 191, 0.7);
+}
+
+.miniatura:hover::after,
+.miniatura:focus-visible::after {
+    opacity: 1;
 }
 
 .miniatura:hover img {
@@ -464,11 +679,11 @@ input[type="range"] {
 }
 
 .vazio {
-    padding: 40px 20px;
+    padding: 48px 20px;
     text-align: center;
     color: var(--cor-texto-suave);
     border: 2px dashed var(--cor-borda);
-    border-radius: 16px;
+    border-radius: 18px;
 }
 
 /* ========== Visualizador ========== */
@@ -476,27 +691,30 @@ input[type="range"] {
     width: min(1200px, 94vw);
     max-height: 92vh;
     padding: 0;
-    border: 1px solid var(--cor-borda);
-    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--cor-ouro) 45%, var(--cor-borda));
+    border-radius: 18px;
     background: var(--cor-painel);
     color: var(--cor-texto);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
 }
 
 .visualizador::backdrop {
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(8, 4, 16, 0.8);
+    backdrop-filter: blur(4px);
 }
 
 .vis-conteudo {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 1fr) 330px;
     max-height: 92vh;
 }
 
 .vis-conteudo img {
     width: 100%;
+    height: 100%;
     max-height: 92vh;
     object-fit: contain;
-    background: #000;
+    background: #07040d;
 }
 
 .vis-info {
@@ -506,13 +724,14 @@ input[type="range"] {
     gap: 14px;
     padding: 24px 20px 20px;
     overflow: auto;
+    border-left: 1px solid var(--cor-borda);
 }
 
 .vis-info h3 {
-    font-size: 0.85rem;
-    color: var(--cor-texto-suave);
+    font-size: 0.78rem;
+    color: var(--cor-ouro);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.12em;
 }
 
 .vis-prompt {
@@ -525,7 +744,10 @@ input[type="range"] {
     grid-template-columns: auto minmax(0, 1fr);
     gap: 6px 14px;
     margin: 0;
-    font-size: 0.9rem;
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--cor-campo);
+    font-size: 0.88rem;
 }
 
 .vis-dados dt {
@@ -549,11 +771,16 @@ input[type="range"] {
     right: 10px;
     width: 34px;
     height: 34px;
-    border: 0;
+    border: 1px solid var(--cor-borda);
     border-radius: 8px;
     background: var(--cor-campo);
     color: var(--cor-texto);
     cursor: pointer;
+}
+
+.fechar:hover {
+    border-color: var(--cor-ouro);
+    color: var(--cor-ouro-claro);
 }
 
 /* ========== Aviso ========== */
@@ -561,11 +788,14 @@ input[type="range"] {
     position: fixed;
     left: 50%;
     bottom: 24px;
+    z-index: 20;
     padding: 10px 20px;
+    border: 1px solid var(--cor-ouro);
     border-radius: 999px;
-    background: var(--cor-texto);
-    color: var(--cor-fundo);
+    background: var(--cor-painel);
+    color: var(--cor-ouro-claro);
     font-weight: 600;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     opacity: 0;
     pointer-events: none;
     transform: translate(-50%, 14px);
@@ -579,7 +809,7 @@ input[type="range"] {
 
 /* ========== Acessibilidade ========== */
 :focus-visible {
-    outline: 3px solid var(--cor-destaque);
+    outline: 2px solid var(--cor-roxo);
     outline-offset: 2px;
 }
 
@@ -590,32 +820,22 @@ input[type="range"] {
     }
 }
 
-/* ========== Responsivo ========== */
-@media (max-width: 860px) {
-    .layout {
-        grid-template-columns: minmax(0, 1fr);
-        padding: 14px;
-    }
-
-    .painel {
-        position: static;
-    }
-
-    .vis-conteudo {
-        grid-template-columns: minmax(0, 1fr);
-        overflow: auto;
-    }
-
-    .vis-conteudo img {
-        max-height: 60vh;
-    }
-}
-
 /* ========== NidraIA 0.2: versão, tradução ========== */
 .versao {
-    font-size: 0.75rem;
+    align-self: flex-start;
+    font-family: var(--fonte);
+    margin-top: 4px;
+    padding: 1px 8px;
+    border: 1px solid color-mix(in srgb, var(--cor-ouro) 40%, transparent);
+    border-radius: 999px;
+    font-size: 0.7rem;
     font-weight: 600;
-    color: var(--cor-texto-suave);
+    letter-spacing: 0;
+    color: var(--cor-ouro);
+}
+
+.versao:empty {
+    display: none;
 }
 
 .opcao-check {
@@ -632,7 +852,7 @@ input[type="range"] {
     width: 18px;
     height: 18px;
     margin: 1px 0 0;
-    accent-color: var(--cor-destaque);
+    accent-color: var(--cor-roxo);
 }
 
 .opcao-check em {
@@ -661,9 +881,9 @@ select:disabled {
     display: grid;
     gap: 12px;
     padding: 14px;
-    border: 1.5px solid color-mix(in srgb, var(--cor-destaque) 55%, transparent);
+    border: 1.5px solid color-mix(in srgb, var(--cor-ouro) 55%, transparent);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--cor-destaque) 8%, var(--cor-painel));
+    background: color-mix(in srgb, var(--cor-ouro) 7%, var(--cor-painel));
 }
 
 .link {
@@ -671,7 +891,7 @@ select:disabled {
     padding: 0;
     border: 0;
     background: none;
-    color: var(--cor-texto-suave);
+    color: var(--cor-roxo-claro);
     font: inherit;
     font-size: 0.85rem;
     text-decoration: underline;
@@ -679,7 +899,7 @@ select:disabled {
 }
 
 .link:hover {
-    color: var(--cor-texto);
+    color: var(--cor-ouro-claro);
 }
 
 /* ========== NidraIA 0.3: aumentar resolução ========== */
@@ -718,14 +938,19 @@ select:disabled {
     transition: border-color 0.2s, color 0.2s;
 }
 
-.estilos input:checked + span {
-    border-color: var(--cor-destaque);
+.estilos span:hover {
+    border-color: var(--cor-roxo);
     color: var(--cor-texto);
-    background: color-mix(in srgb, var(--cor-destaque) 12%, var(--cor-campo));
+}
+
+.estilos input:checked + span {
+    border-color: var(--cor-roxo);
+    color: var(--cor-roxo-claro);
+    background: var(--cor-roxo-selecao);
 }
 
 .estilos input:focus-visible + span {
-    outline: 3px solid var(--cor-destaque);
+    outline: 2px solid var(--cor-roxo);
     outline-offset: 2px;
 }
 
@@ -743,12 +968,13 @@ select:disabled {
     font-size: 0.85rem;
     text-align: center;
     cursor: pointer;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background 0.2s;
 }
 
 .envio:hover,
 .envio.arrastando {
-    border-color: var(--cor-destaque);
+    border-color: var(--cor-ouro);
+    background: color-mix(in srgb, var(--cor-ouro) 6%, var(--cor-campo));
 }
 
 .envio input {
@@ -772,4 +998,66 @@ select:disabled {
     display: grid;
     gap: 8px;
     margin-top: 10px;
+}
+
+/* ========== Responsivo ========== */
+@media (max-width: 860px) {
+    :root {
+        --altura-topo: 60px;
+    }
+
+    .topo {
+        padding: 0 16px;
+    }
+
+    .marca {
+        font-size: 1.2rem;
+    }
+
+    .marca img {
+        width: 32px;
+        height: 32px;
+    }
+
+    .layout {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 16px;
+    }
+
+    /* No celular o painel volta ao fluxo normal da página */
+    .painel {
+        position: static;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .galeria {
+        columns: 2 150px;
+        column-gap: 10px;
+    }
+
+    .vis-conteudo {
+        grid-template-columns: minmax(0, 1fr);
+        overflow: auto;
+    }
+
+    .vis-conteudo img {
+        max-height: 60vh;
+    }
+
+    .vis-info {
+        border-left: 0;
+        border-top: 1px solid var(--cor-borda);
+    }
+}
+
+@media (max-width: 420px) {
+    .estado {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+
+    .formatos {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }

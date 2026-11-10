@@ -1,57 +1,52 @@
-﻿# Desenha o ícone do NidraIA (mesmo desenho do public/icone.svg) em vários tamanhos e grava recursos/nidraia.ico
+﻿# Gera o ícone do NidraIA a partir de recursos/icone-original.png (cabeça de dragão feita pelo próprio NidraIA).
+# Saídas: public/icone.png (página) e recursos/nidraia.ico (programa), com cantos arredondados.
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 
-function DesenharIcone([int]$t) {
+$original = [System.Drawing.Image]::FromFile((Join-Path $PSScriptRoot "icone-original.png"))
+
+# Desenha a imagem num quadrado de lado $t com cantos arredondados (fora deles fica transparente)
+function Desenhar([int]$t) {
     $bmp = New-Object System.Drawing.Bitmap $t, $t
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = "AntiAlias"
+    $g.InterpolationMode = "HighQualityBicubic"
+    $g.PixelOffsetMode = "HighQuality"
     $g.Clear([System.Drawing.Color]::Transparent)
-    $e = $t / 32.0  # o SVG original tem 32 × 32
-
-    # Fundo: quadrado arredondado com degradê laranja
-    $raio = 8 * $e
+    $raio = [math]::Max(2, $t * 0.2)
     $caminho = New-Object System.Drawing.Drawing2D.GraphicsPath
     $caminho.AddArc(0, 0, 2 * $raio, 2 * $raio, 180, 90)
     $caminho.AddArc($t - 2 * $raio, 0, 2 * $raio, 2 * $raio, 270, 90)
     $caminho.AddArc($t - 2 * $raio, $t - 2 * $raio, 2 * $raio, 2 * $raio, 0, 90)
     $caminho.AddArc(0, $t - 2 * $raio, 2 * $raio, 2 * $raio, 90, 90)
     $caminho.CloseFigure()
-    $degrade = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-        (New-Object System.Drawing.PointF 0, 0), (New-Object System.Drawing.PointF $t, $t),
-        [System.Drawing.Color]::FromArgb(255, 0xff, 0xb3, 0x47), [System.Drawing.Color]::FromArgb(255, 0xff, 0x5e, 0x62))
-    $g.FillPath($degrade, $caminho)
-
-    $branco = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
-    $brancoSuave = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(230, 255, 255, 255))
-    # Sol
-    $g.FillEllipse($branco, 7.5 * $e, 7.5 * $e, 7 * $e, 7 * $e)
-    # Montanhas
-    $montanhas = [System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF (5 * $e), (25 * $e)), (New-Object System.Drawing.PointF (12 * $e), (17 * $e)),
-        (New-Object System.Drawing.PointF (17 * $e), (22 * $e)), (New-Object System.Drawing.PointF (21 * $e), (18 * $e)),
-        (New-Object System.Drawing.PointF (27 * $e), (25 * $e)))
-    $g.FillPolygon($brancoSuave, $montanhas)
-    # Brilho (estrela de 4 pontas)
-    $estrela = [System.Drawing.PointF[]]@(
-        (New-Object System.Drawing.PointF (24 * $e), (4 * $e)), (New-Object System.Drawing.PointF (25.2 * $e), (6.8 * $e)),
-        (New-Object System.Drawing.PointF (28 * $e), (8 * $e)), (New-Object System.Drawing.PointF (25.2 * $e), (9.2 * $e)),
-        (New-Object System.Drawing.PointF (24 * $e), (12 * $e)), (New-Object System.Drawing.PointF (22.8 * $e), (9.2 * $e)),
-        (New-Object System.Drawing.PointF (20 * $e), (8 * $e)), (New-Object System.Drawing.PointF (22.8 * $e), (6.8 * $e)))
-    $g.FillPolygon($branco, $estrela)
+    $pincel = New-Object System.Drawing.TextureBrush $original
+    $pincel.ScaleTransform($t / $original.Width, $t / $original.Height)
+    $g.FillPath($pincel, $caminho)
+    $pincel.Dispose()
     $g.Dispose()
     return $bmp
 }
 
+function EmPng($bmp) {
+    $ms = New-Object System.IO.MemoryStream
+    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    return , $ms.ToArray()
+}
+
+# Ícone da página
+$pagina = Desenhar 256
+$pagina.Save((Join-Path (Split-Path $PSScriptRoot) "public\icone.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+$pagina.Dispose()
+
 # Arquivo .ico com cada tamanho guardado como PNG (formato aceito desde o Windows Vista)
 $tamanhos = 16, 24, 32, 48, 64, 128, 256
 $imagens = foreach ($t in $tamanhos) {
-    $bmp = DesenharIcone $t
-    $ms = New-Object System.IO.MemoryStream
-    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp = Desenhar $t
+    EmPng $bmp
     $bmp.Dispose()
-    , $ms.ToArray()
 }
+$original.Dispose()
 
 $saida = Join-Path $PSScriptRoot "nidraia.ico"
 $arquivo = [System.IO.File]::Create($saida)
@@ -68,4 +63,4 @@ for ($i = 0; $i -lt $tamanhos.Count; $i++) {
 }
 foreach ($img in $imagens) { $w.Write($img) }
 $w.Close()
-Write-Host "Ícone gravado em $saida"
+Write-Host "Ícone gravado em public\icone.png e $saida"

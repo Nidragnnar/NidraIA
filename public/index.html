@@ -5,14 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NidraIA</title>
-    <link rel="icon" href="icone.svg" type="image/svg+xml">
+    <link rel="icon" href="icone.png" type="image/png">
     <link rel="stylesheet" href="style.css">
     <script src="app.js" type="module" defer></script>
 </head>
 
 <body>
     <header class="topo">
-        <h1 class="marca"><img src="icone.svg" alt="" width="28" height="28"> NidraIA <span id="versao" class="versao"></span></h1>
+        <h1 class="marca">
+            <img src="icone.png" alt="" width="40" height="40">
+            <span class="nome">Nidra<b>IA</b></span>
+            <span id="versao" class="versao"></span>
+        </h1>
         <button type="button" id="estado" class="estado" data-estado="carregando" aria-expanded="false" aria-controls="log">
             <span class="luz" aria-hidden="true"></span>
             <span id="estado-texto">Ligando o motor...</span>
@@ -24,6 +28,7 @@
     <main class="layout">
         <!-- Painel de configurações -->
         <form id="form" class="painel" novalidate>
+            <h2 class="secao"><span>1</span> Sua ideia</h2>
             <label class="campo">
                 <span>Modelo</span>
                 <select id="modelo" aria-describedby="modelo-desc"></select>
@@ -58,6 +63,7 @@
                 <button type="button" class="link" id="conferencia-fechar">Voltar e mudar o texto em português</button>
             </section>
 
+            <h2 class="secao"><span>2</span> Aparência</h2>
             <fieldset class="campo">
                 <legend>Estilo</legend>
                 <div class="estilos" id="estilos"></div>
@@ -85,6 +91,7 @@
                 <textarea id="negativo" rows="2" maxlength="2000" placeholder="Ex.: borrado, texto, marca d'água"></textarea>
             </details>
 
+            <h2 class="secao"><span>3</span> Tamanho e quantidade</h2>
             <fieldset class="campo">
                 <legend>Formato</legend>
                 <div class="formatos" id="formatos">
