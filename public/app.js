@@ -428,7 +428,9 @@ async function acompanhar(id, pedido) {
         const segundos = ((performance.now() - inicio) / 1000).toFixed(1);
 
         if (t.status === "queued") {
-            el.atualStatus.textContent = t.fila > 0 ? `Na fila (posição ${t.fila})...` : "Preparando...";
+            // "aviso": faltou memória e o NidraIA está recarregando o modelo para tentar de novo
+            el.atualStatus.textContent = t.aviso || (t.fila > 0 ? `Na fila (posição ${t.fila})...` : "Preparando...");
+            el.barra.style.width = "0%";
         } else if (t.status === "generating") {
             el.atualStatus.textContent = t.totalPassos ? `Gerando: passo ${t.passo} de ${t.totalPassos} · ${segundos}s` : `Gerando... ${segundos}s`;
             if (t.totalPassos) el.barra.style.width = `${(t.passo / t.totalPassos) * 100}%`;

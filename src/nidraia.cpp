@@ -410,7 +410,15 @@ static std::string traduzir(const std::string& texto) {
 
 // ========== Pedidos de geração ==========
 static std::mutex mutexPedidos;
-static std::map<std::string, json> pedidos;  // id do trabalho → configurações usadas
+// Trabalho em andamento. O id que a tela conhece não muda, mesmo se o pedido for reenviado ao motor.
+struct Trabalho {
+    json pedido;             // configurações usadas, salvas junto da imagem
+    json corpoMotor;         // pedido mandado ao motor, guardado para tentar de novo
+    std::string idMotor;     // id atual no motor (vazio enquanto o motor recarrega para tentar de novo)
+    bool refeito = false;    // já tentou de novo depois de faltar memória
+    bool cancelado = false;  // cancelado enquanto o motor recarregava
+};
+static std::map<std::string, Trabalho> pedidos;  // id do trabalho → trabalho
 
 static double numero(const json& corpo, const char* campo, double minimo, double maximo, double padrao) {
     double valor = padrao;
@@ -683,20 +691,34 @@ static std::string enfileirar(const json& pedido, const json& corpoMotor) {
     json trabalho = chamarMotor("POST", "/sdcpp/v1/img_gen", corpoMotor);
     std::string id = trabalho["id"].get<std::string>();
     std::lock_guard trava(mutexPedidos);
-    pedidos[id] = pedido;
+    pedidos[id] = Trabalho{pedido, corpoMotor, id};
     return id;
 }
 
-// Troca a mensagem técnica do motor por uma explicação, olhando o log recente
-static std::string explicarFalha(const std::string& mensagem) {
+// O log recente mostra que faltou memória na placa de vídeo?
+static bool faltouMemoria() {
     for (const auto& linha : ultimasLinhas(40)) {
         if (linha.find("cannot make enough memory") != std::string::npos || linha.find("out of memory") != std::string::npos ||
-            linha.find("ErrorOutOfDeviceMemory") != std::string::npos) {
-            return "A placa de vídeo ficou sem memória. Feche jogos ou programas pesados, ou gere menos imagens por vez, "
-                   "e tente de novo.";
-        }
+            linha.find("ErrorOutOfDeviceMemory") != std::string::npos)
+            return true;
     }
+    return false;
+}
+
+static const char* SEM_MEMORIA =
+    "A placa de vídeo ficou sem memória. Feche jogos ou programas pesados, ou gere menos imagens por vez, e tente de novo.";
+
+// Troca a mensagem técnica do motor por uma explicação, olhando o log recente
+static std::string explicarFalha(const std::string& mensagem) {
+    if (faltouMemoria()) return SEM_MEMORIA;
     return mensagem.empty() ? "A geração falhou. Veja o log (clique na bolinha do topo)." : mensagem;
+}
+
+// Resposta enquanto o motor recarrega para tentar de novo
+static json aguardandoNovaTentativa() {
+    return {{"status", "queued"},  {"fila", 0},        {"previa", nullptr},
+            {"passo", nullptr},    {"totalPassos", nullptr}, {"erro", nullptr},
+            {"aviso", "Faltou memória na placa de vídeo. Recarregando o modelo e tentando de novo..."}};
 }
 
 // Upscalers do config.json cujo arquivo .pth existe em modelos/upscale
@@ -856,8 +878,78 @@ static void configurarRotas(httplib::Server& servidor) {
     servidor.Get(R"(/api/trabalhos/([^/]+))", [](const httplib::Request& req, httplib::Response& res) {
         std::string id = req.matches[1];
         if (!std::regex_match(id, ID_TRABALHO)) throw ErroHttp(404, "Não encontrado.");
-        json t = chamarMotor("GET", "/sdcpp/v1/jobs/" + id);
+
+        // Qual id consultar no motor (muda se o pedido foi reenviado)
+        std::string idMotor = id;
+        bool esperandoMotor = false, cancelado = false;
+        json corpoReenvio;
+        {
+            std::lock_guard trava(mutexPedidos);
+            auto encontrado = pedidos.find(id);
+            if (encontrado != pedidos.end()) {
+                auto& trabalho = encontrado->second;
+                cancelado = trabalho.cancelado;
+                esperandoMotor = trabalho.idMotor.empty();
+                if (esperandoMotor) corpoReenvio = trabalho.corpoMotor;
+                idMotor = trabalho.idMotor;
+                if (cancelado) pedidos.erase(encontrado);
+            }
+        }
+        if (cancelado) return responderJson(res, 200, {{"status", "cancelled"}});
+        if (esperandoMotor) {
+            EstadoMotor estado;
+            {
+                std::lock_guard trava(mutexMotor);
+                estado = estadoMotor;
+            }
+            if (estado == EstadoMotor::Carregando) return responderJson(res, 200, aguardandoNovaTentativa());
+            if (estado != EstadoMotor::Pronto) {
+                std::lock_guard trava(mutexPedidos);
+                pedidos.erase(id);
+                return responderJson(res, 200, {{"status", "failed"}, {"erro", SEM_MEMORIA}});
+            }
+            // Motor recarregado: reenvia o mesmo pedido
+            json novo = chamarMotor("POST", "/sdcpp/v1/img_gen", corpoReenvio);
+            std::lock_guard trava(mutexPedidos);
+            if (auto encontrado = pedidos.find(id); encontrado != pedidos.end())
+                encontrado->second.idMotor = novo["id"].get<std::string>();
+            return responderJson(res, 200, aguardandoNovaTentativa());
+        }
+
+        json t = chamarMotor("GET", "/sdcpp/v1/jobs/" + idMotor);
         std::string status = t.value("status", "");
+
+        // Faltou memória: outro programa pode ter ocupado a placa depois que o modelo carregou.
+        // Recarregar faz o motor medir de novo a memória livre e distribuir o modelo; tenta uma vez só,
+        // e só se não houver outro trabalho que seria perdido ao reiniciar o motor.
+        if (status == "failed" && faltouMemoria()) {
+            bool tentarDeNovo = false;
+            {
+                std::lock_guard trava(mutexPedidos);
+                auto encontrado = pedidos.find(id);
+                if (encontrado != pedidos.end() && !encontrado->second.refeito && pedidos.size() == 1) {
+                    encontrado->second.refeito = true;
+                    encontrado->second.idMotor.clear();
+                    tentarDeNovo = true;
+                }
+            }
+            if (tentarDeNovo) {
+                registrar("[nidraia] Faltou memória na placa de vídeo; recarregando o modelo para tentar de novo.");
+                std::string modelo;
+                {
+                    std::lock_guard trava(mutexMotor);
+                    modelo = modeloAtivo;
+                }
+                try {
+                    ligarMotor(modelo);
+                } catch (...) {
+                    std::lock_guard trava(mutexPedidos);
+                    pedidos.erase(id);
+                    throw;
+                }
+                return responderJson(res, 200, aguardandoNovaTentativa());
+            }
+        }
 
         json resposta = {
             {"status", status},
@@ -881,7 +973,7 @@ static void configurarRotas(httplib::Server& servidor) {
                 std::lock_guard trava(mutexPedidos);
                 auto encontrado = pedidos.find(id);
                 if (encontrado != pedidos.end()) {
-                    pedido = encontrado->second;
+                    pedido = encontrado->second.pedido;
                     pedidos.erase(encontrado);
                 }
             }
@@ -893,7 +985,20 @@ static void configurarRotas(httplib::Server& servidor) {
     servidor.Post(R"(/api/trabalhos/([^/]+)/cancelar)", [](const httplib::Request& req, httplib::Response& res) {
         std::string id = req.matches[1];
         if (!std::regex_match(id, ID_TRABALHO)) throw ErroHttp(404, "Não encontrado.");
-        responderJson(res, 200, chamarMotor("POST", "/sdcpp/v1/jobs/" + id + "/cancel"));
+        std::string idMotor = id;
+        {
+            std::lock_guard trava(mutexPedidos);
+            auto encontrado = pedidos.find(id);
+            if (encontrado != pedidos.end()) {
+                // Enquanto o motor recarrega não há o que cancelar nele; marca para a tela receber "cancelado"
+                if (encontrado->second.idMotor.empty()) {
+                    encontrado->second.cancelado = true;
+                    return responderJson(res, 200, {{"status", "cancelled"}});
+                }
+                idMotor = encontrado->second.idMotor;
+            }
+        }
+        responderJson(res, 200, chamarMotor("POST", "/sdcpp/v1/jobs/" + idMotor + "/cancel"));
     });
 
     servidor.Get("/api/galeria", [](const httplib::Request&, httplib::Response& res) {

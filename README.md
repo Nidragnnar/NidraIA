@@ -15,6 +15,7 @@ Gerador de imagens com IA que roda **no seu próprio computador**, de graça e s
 - **Aumentar resolução 4×** com [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (512 → 2048 em poucos segundos), com um modelo para fotos e outro para anime e ilustração
 - **Gerar 4 variações** de uma imagem da galeria: mesma cena, detalhes diferentes (imagem para imagem com força 0,45)
 - 1 a 4 imagens por vez, com prévia, barra de progresso e botão de cancelar
+- Se faltar memória na placa de vídeo (um jogo aberto depois que o modelo carregou, por exemplo), o NidraIA recarrega o modelo e tenta mais uma vez sozinho
 - Formatos quadrado, retrato, paisagem e grande
 - Semente (seed) salva em cada imagem: **Reutilizar configurações** repete ou varia uma imagem
 - Galeria salva na pasta `galeria/`, com um `.json` ao lado de cada imagem (prompt original, prompt em inglês e configurações)
