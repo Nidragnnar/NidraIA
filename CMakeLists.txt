@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 # A versão do NidraIA fica só aqui: vai para o programa, para o ícone/propriedades do .exe e para o pacote da Release
-project(NidraIA VERSION 0.5.1 LANGUAGES CXX RC)
+project(NidraIA VERSION 0.6.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
