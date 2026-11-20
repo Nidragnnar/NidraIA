@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NidraIA · Dragão</title>
+    <style>
+        /* Cores do tema roxo de dragão com o dourado da moeda (Septim) */
+        :root {
+            --fundo: #0f0b16;
+            --roxo-fundo: #24123f;
+            --roxo-luz: #4a2788;
+            --ouro: #e6be5c;
+            --ouro-claro: #f3d891;
+            --texto: #ece6f8;
+            --texto-suave: #a994d2;
+            --brilho: 1;          /* sobe com o som */
+            --parallax-x: 0px;    /* segue o mouse */
+            --parallax-y: 0px;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--fundo);
+            color: var(--texto);
+            font-family: "Segoe UI", system-ui, sans-serif;
+            user-select: none;
+            cursor: default;
+        }
+
+        /* Fundo: luz roxa vinda do alto, escurecendo nas bordas */
+        .fundo {
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(60% 55% at 50% 38%, var(--roxo-luz) 0%, var(--roxo-fundo) 45%, #170b29 75%, var(--fundo) 100%);
+        }
+
+        .vinheta {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(5, 2, 10, 0.75) 100%);
+            pointer-events: none;
+        }
+
+        .video {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Dragão no centro, um pouco acima do meio */
+        .palco {
+            position: fixed;
+            left: 50%;
+            top: 41%;
+            width: min(52vh, 46vw);
+            aspect-ratio: 634 / 639;
+            transform: translate(calc(-50% + var(--parallax-x)), calc(-50% + var(--parallax-y)));
+            transition: transform 0.6s ease-out;
+        }
+
+        /* Halo dourado atrás do dragão */
+        .halo {
+            position: absolute;
+            inset: -18%;
+            background: radial-gradient(closest-side, rgba(230, 190, 92, 0.32), rgba(230, 190, 92, 0.08) 55%, transparent 75%);
+            opacity: calc(0.55 + 0.35 * var(--brilho));
+            animation: pulsar 6s ease-in-out infinite;
+        }
+
+        .dragao {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 calc(18px * var(--brilho)) rgba(230, 190, 92, 0.45)) drop-shadow(0 18px 30px rgba(0, 0, 0, 0.55));
+            animation: respirar 6s ease-in-out infinite;
+            transform-origin: 45% 70%;
+        }
+
+        /* Brilho que passa pelo olho de vez em quando */
+        .olho {
+            position: absolute;
+            left: 70.8%;
+            top: 44.3%;
+            width: 9%;
+            aspect-ratio: 1;
+            transform: translate(-50%, -50%);
+            background: radial-gradient(closest-side, rgba(255, 250, 225, 0.95), rgba(243, 216, 145, 0.5) 40%, transparent 75%);
+            opacity: 0;
+            animation: piscar 9s ease-in-out infinite;
+            animation-delay: 3s;
+            mix-blend-mode: screen;
+        }
+
+        @keyframes respirar {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.025) rotate(-0.6deg); }
+        }
+
+        @keyframes pulsar {
+            0%, 100% { transform: scale(0.96); }
+            50% { transform: scale(1.04); }
+        }
+
+        @keyframes piscar {
+            0%, 86%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+            90% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            94% { opacity: 0.2; transform: translate(-50%, -50%) scale(0.8); }
+        }
+
+        /* Relógio e data embaixo do dragão */
+        .relogio {
+            position: fixed;
+            left: 50%;
+            top: 76%;
+            transform: translateX(-50%);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .hora {
+            font-family: Cinzel, "Trajan Pro", "Book Antiqua", Georgia, serif;
+            font-size: clamp(48px, 9vh, 120px);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            line-height: 1;
+            background: linear-gradient(180deg, var(--ouro-claro), var(--ouro) 55%, #b88a2c);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.55));
+        }
+
+        .segundos {
+            font-size: 0.42em;
+            letter-spacing: 0.04em;
+            margin-left: 0.15em;
+            vertical-align: 0.95em;
+        }
+
+        .data {
+            margin-top: 14px;
+            font-size: clamp(14px, 2.1vh, 26px);
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            color: var(--texto-suave);
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+        }
+
+        /* Fio dourado entre a hora e a data */
+        .fio {
+            width: 46%;
+            height: 1px;
+            margin: 14px auto 0;
+            background: linear-gradient(90deg, transparent, var(--ouro), transparent);
+            opacity: 0.6;
+        }
+
+        [hidden] { display: none !important; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .dragao, .halo, .olho { animation: none; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="fundo"></div>
+    <!-- Dragão animado: vídeo em loop gerado pelo NidraIA (Wan 2.2) a partir deste mesmo papel de parede -->
+    <video class="video" id="video" muted loop playsinline hidden></video>
+    <canvas id="brasas"></canvas>
+    <div class="palco" id="palco">
+        <div class="halo"></div>
+        <img class="dragao" src="dragao.png" alt="">
+        <div class="olho"></div>
+    </div>
+    <div class="vinheta"></div>
+    <div class="relogio" id="relogio">
+        <div class="hora"><span id="hora">00:00</span><span class="segundos" id="segundos"></span></div>
+        <div class="fio" id="fio"></div>
+        <div class="data" id="data"></div>
+    </div>
+
+    <script>
+        // Papel de parede do NidraIA para o Wallpaper Engine (tipo "web")
+        const config = {
+            relogio: true,
+            data: true,
+            formato24h: true,
+            segundos: false,
+            brasas: 120,      // quantidade de brasas na tela
+            som: true,        // brasas e brilho reagem ao som do PC
+            mouse: true,      // o dragão segue o mouse de leve
+            animado: false,   // usa o vídeo dragao-loop.webm no lugar do dragão (desligado: o vídeo do Wan não ficou bom)
+        };
+
+        // ========== Dragão animado (vídeo) ==========
+        const video = document.getElementById("video");
+        let videoFalhou = false;
+        video.addEventListener("error", () => {
+            // Sem o vídeo (ou formato não suportado): volta para o dragão parado
+            videoFalhou = true;
+            aplicarDragao();
+        });
+
+        function aplicarDragao() {
+            const usarVideo = config.animado && !videoFalhou;
+            if (usarVideo && !video.getAttribute("src")) video.src = "dragao-loop.webm";
+            video.hidden = !usarVideo;
+            document.getElementById("palco").hidden = usarVideo;
+            if (usarVideo) video.play().catch(() => {});
+            else video.pause();
+        }
+
+        const $ = (id) => document.getElementById(id);
+        const raiz = document.documentElement.style;
+
+        // ========== Relógio ==========
+        const formatoData = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+
+        function atualizarRelogio() {
+            const agora = new Date();
+            let h = agora.getHours();
+            let sufixo = "";
+            if (!config.formato24h) {
+                sufixo = h < 12 ? " AM" : " PM";
+                h = h % 12 || 12;
+            }
+            const m = String(agora.getMinutes()).padStart(2, "0");
+            $("hora").textContent = `${config.formato24h ? String(h).padStart(2, "0") : h}:${m}`;
+            $("segundos").textContent = config.segundos ? String(agora.getSeconds()).padStart(2, "0") : sufixo.trim();
+            $("data").textContent = formatoData.format(agora);
+        }
+
+        function aplicarVisibilidade() {
+            $("relogio").hidden = !config.relogio && !config.data;
+            $("hora").parentElement.hidden = !config.relogio;
+            $("fio").hidden = !(config.relogio && config.data);
+            $("data").hidden = !config.data;
+            atualizarRelogio();
+        }
+
+        // ========== Brasas ==========
+        const tela = $("brasas");
+        const ctx = tela.getContext("2d");
+        let largura = 0, altura = 0;
+        const brasas = [];
+
+        function redimensionar() {
+            largura = tela.width = window.innerWidth;
+            altura = tela.height = window.innerHeight;
+        }
+
+        function novaBrasa(espalhada) {
+            return {
+                x: largura * (0.15 + Math.random() * 0.7),
+                y: espalhada ? Math.random() * altura : altura + 10,
+                r: 0.6 + Math.random() * 2.2,
+                vy: 0.25 + Math.random() * 0.75,
+                fase: Math.random() * Math.PI * 2,
+                balanco: 0.3 + Math.random() * 0.9,
+                vida: 0.5 + Math.random() * 0.5,
+            };
+        }
+
+        function ajustarQuantidade() {
+            while (brasas.length < config.brasas) brasas.push(novaBrasa(true));
+            brasas.length = Math.min(brasas.length, config.brasas);
+        }
+
+        // ========== Som (só existe dentro do Wallpaper Engine) ==========
+        let energia = 0;  // 0 a ~1, suavizada
+        if (window.wallpaperRegisterAudioListener) {
+            window.wallpaperRegisterAudioListener((valores) => {
+                if (!config.som) {
+                    energia = 0;
+                    return;
+                }
+                // Graves dos dois canais (as primeiras faixas de cada lado)
+                let soma = 0;
+                for (let i = 0; i < 12; i++) soma += valores[i] + valores[64 + i];
+                const alvo = Math.min(1, soma / 12);
+                energia += (alvo - energia) * 0.25;
+            });
+        }
+
+        // ========== Animação ==========
+        let ultimo = performance.now();
+        function quadro(agora) {
+            const dt = Math.min(50, agora - ultimo) / 16.67;  // 1 = um quadro a 60 fps
+            ultimo = agora;
+            energia *= 0.97;
+            raiz.setProperty("--brilho", (1 + energia * 1.2).toFixed(3));
+
+            ctx.clearRect(0, 0, largura, altura);
+            ctx.globalCompositeOperation = "lighter";
+            const t = agora / 1000;
+            const impulso = 1 + energia * 2.5;
+            for (let i = 0; i < brasas.length; i++) {
+                const b = brasas[i];
+                b.y -= b.vy * impulso * dt;
+                b.x += Math.sin(t * b.balanco + b.fase) * 0.35 * dt;
+                if (b.y < -20) brasas[i] = novaBrasa(false);
+                // Mais fortes no meio da subida, somem no alto
+                const altura01 = 1 - b.y / altura;
+                const alfa = Math.max(0, Math.sin(Math.min(1, altura01 * 1.1) * Math.PI)) * b.vida * (0.75 + 0.25 * Math.sin(t * 3 + b.fase));
+                const raio = b.r * (1 + energia * 0.8);
+                const brilho = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, raio * 4);
+                brilho.addColorStop(0, `rgba(255, 232, 170, ${alfa})`);
+                brilho.addColorStop(0.35, `rgba(230, 190, 92, ${alfa * 0.6})`);
+                brilho.addColorStop(1, "rgba(230, 150, 60, 0)");
+                ctx.fillStyle = brilho;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, raio * 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalCompositeOperation = "source-over";
+            requestAnimationFrame(quadro);
+        }
+
+        // ========== Mouse: o dragão acompanha de leve ==========
+        window.addEventListener("mousemove", (evento) => {
+            if (!config.mouse) return;
+            const dx = (evento.clientX / largura - 0.5) * 2;
+            const dy = (evento.clientY / altura - 0.5) * 2;
+            raiz.setProperty("--parallax-x", `${(dx * 14).toFixed(1)}px`);
+            raiz.setProperty("--parallax-y", `${(dy * 10).toFixed(1)}px`);
+        });
+
+        // ========== Opções do Wallpaper Engine ==========
+        window.wallpaperPropertyListener = {
+            applyUserProperties(p) {
+                if (p.relogio) config.relogio = p.relogio.value;
+                if (p.data) config.data = p.data.value;
+                if (p.formato24h) config.formato24h = p.formato24h.value;
+                if (p.segundos) config.segundos = p.segundos.value;
+                if (p.brasas) config.brasas = Math.round(p.brasas.value);
+                if (p.som) config.som = p.som.value;
+                if (p.mouse) {
+                    config.mouse = p.mouse.value;
+                    if (!config.mouse) {
+                        raiz.setProperty("--parallax-x", "0px");
+                        raiz.setProperty("--parallax-y", "0px");
+                    }
+                }
+                if (p.animado) {
+                    config.animado = p.animado.value;
+                    aplicarDragao();
+                }
+                if (p.cordestaque) {
+                    // O Wallpaper Engine manda a cor como "r g b" de 0 a 1
+                    const [r, g, b] = p.cordestaque.value.split(" ").map((v) => Math.round(Number(v) * 255));
+                    raiz.setProperty("--ouro", `rgb(${r}, ${g}, ${b})`);
+                }
+                aplicarVisibilidade();
+                ajustarQuantidade();
+            },
+        };
+
+        // ========== Início ==========
+        // ?limpo=1: sem relógio, data nem brasas (usado para gerar a imagem que vira o vídeo animado)
+        if (new URLSearchParams(location.search).get("limpo") === "1") {
+            Object.assign(config, { relogio: false, data: false, brasas: 0, animado: false });
+        }
+        redimensionar();
+        aplicarDragao();
+        window.addEventListener("resize", redimensionar);
+        ajustarQuantidade();
+        aplicarVisibilidade();
+        setInterval(atualizarRelogio, 1000);
+        requestAnimationFrame(quadro);
+    </script>
+</body>
+
+</html>

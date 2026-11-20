@@ -1,0 +1,20 @@
+{
+    "file": "index.html",
+    "preview": "preview.jpg",
+    "title": "NidraIA - Dragão",
+    "description": "Dragão dourado sobre o roxo do NidraIA, com brasas que reagem ao som, relógio e data em português.",
+    "type": "web",
+    "general": {
+        "supportsaudioprocessing": true,
+        "properties": {
+            "relogio": { "order": 0, "text": "Mostrar o relógio", "type": "bool", "value": true },
+            "segundos": { "order": 1, "text": "Mostrar os segundos", "type": "bool", "value": false },
+            "formato24h": { "order": 2, "text": "Formato 24 horas", "type": "bool", "value": true },
+            "data": { "order": 3, "text": "Mostrar a data", "type": "bool", "value": true },
+            "brasas": { "order": 4, "text": "Quantidade de brasas", "type": "slider", "min": 0, "max": 300, "value": 120, "fraction": false },
+            "som": { "order": 5, "text": "Brasas reagem ao som", "type": "bool", "value": true },
+            "mouse": { "order": 6, "text": "Dragão segue o mouse", "type": "bool", "value": true },
+            "cordestaque": { "order": 7, "text": "Cor do dourado", "type": "color", "value": "0.902 0.745 0.361" }
+        }
+    }
+}

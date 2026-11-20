@@ -1,0 +1,28 @@
+Papel de parede do NidraIA para o Wallpaper Engine
+===================================================
+
+Dragao dourado sobre o roxo do NidraIA, com brasas que reagem ao som,
+relogio e data em portugues.
+
+COMO USAR
+1. Copie esta pasta inteira para:
+   <pasta do Wallpaper Engine>\projects\myprojects\nidraia-dragao
+   (normalmente ...\steamapps\common\wallpaper_engine\projects\myprojects)
+2. Abra o Wallpaper Engine. Ele aparece na aba "Instalados" como
+   "NidraIA - Dragao". Clique nele para usar.
+
+   Outra forma: no Wallpaper Engine, "Abrir papel de parede" >
+   "Abrir do arquivo" e escolha o index.html desta pasta.
+
+OPCOES (painel da direita do Wallpaper Engine)
+- Mostrar o relogio, os segundos, formato 24 horas e a data
+- Quantidade de brasas (0 a 300)
+- Brasas reagem ao som
+- Dragao segue o mouse
+- Cor do dourado
+
+ARQUIVOS
+- index.html   o papel de parede (pagina web)
+- project.json configuracao e opcoes para o Wallpaper Engine
+- dragao.png   o dragao com fundo transparente
+- preview.jpg  imagem mostrada na lista do Wallpaper Engine
