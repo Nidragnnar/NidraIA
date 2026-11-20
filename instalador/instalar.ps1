@@ -46,7 +46,16 @@ $componentes = @(
        destino = "modelos\flux2-klein\Qwen3-4B-Q4_K_M.gguf"; bytes = 2497281312; sha = "f6f851777709861056efcdad3af01da38b31223a3ba26e61a4f8bf3a2195813a" },
     @{ grupo = "klein"; nome = "FLUX.2 klein 4B (VAE)"; mb = 238
        url = "https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors"
-       destino = "modelos\flux2-klein\full_encoder_small_decoder.safetensors"; bytes = 249519092; sha = "ea4273f02d1fafbf8e1d1c2cf6018ed8748652eb0bf34f2dd91171f16f15ab62" }
+       destino = "modelos\flux2-klein\full_encoder_small_decoder.safetensors"; bytes = 249519092; sha = "ea4273f02d1fafbf8e1d1c2cf6018ed8748652eb0bf34f2dd91171f16f15ab62" },
+    @{ grupo = "video"; nome = "Video Wan 2.2 TI2V 5B (modelo)"; mb = 3274
+       url = "https://huggingface.co/QuantStack/Wan2.2-TI2V-5B-GGUF/resolve/main/Wan2.2-TI2V-5B-Q4_K_M.gguf"
+       destino = "modelos\wan22-ti2v-5b\Wan2.2-TI2V-5B-Q4_K_M.gguf"; bytes = 3433116000; sha = "95b19697b7f98e65b0a543640e9ca7b4dfec32e2a6e3731e8e10708be52655e2" },
+    @{ grupo = "video"; nome = "Video Wan 2.2 (texto UMT5-XXL)"; mb = 3486
+       url = "https://huggingface.co/city96/umt5-xxl-encoder-gguf/resolve/main/umt5-xxl-encoder-Q4_K_M.gguf"
+       destino = "modelos\wan22-ti2v-5b\umt5-xxl-encoder-Q4_K_M.gguf"; bytes = 3655145312; sha = "17cf97a5bbbc60a646d6105b832b6f657ce904a8a1ad970e4b59df0c67584a40" },
+    @{ grupo = "video"; nome = "Video Wan 2.2 (VAE)"; mb = 1344
+       url = "https://huggingface.co/QuantStack/Wan2.2-TI2V-5B-GGUF/resolve/main/VAE/Wan2.2_VAE.safetensors"
+       destino = "modelos\wan22-ti2v-5b\Wan2.2_VAE.safetensors"; bytes = 1409400960; sha = "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156" }
 )
 
 function Escrever($texto, $cor = "Gray") { Write-Host $texto -ForegroundColor $cor }
@@ -140,6 +149,7 @@ $flux = (Read-Host "Baixar tambem o FLUX.1 schnell? Mais qualidade, mais lento (
 $tradutor = (Read-Host "Baixar o tradutor de prompt para ingles? (cerca de 2,4 GB) [S/n]") -notmatch "^[nN]"
 $klein = (Read-Host "Baixar o FLUX.2 klein 4B? Recomendado: rapido, caprichado e escreve texto na imagem (cerca de 6,7 GB) [S/n]") -notmatch "^[nN]"
 $zimage = (Read-Host "Baixar o Z-Image Turbo? Fotos muito realistas e texto na imagem (cerca de 3,7 GB, mais o tradutor e o VAE se faltarem) [s/N]") -match "^[sS]"
+$video = (Read-Host "Baixar o modelo de VIDEO (Wan 2.2)? Clipes de 1 a 3 s, lento, precisa de placa de 8 GB (cerca de 8,5 GB) [s/N]") -match "^[sS]"
 
 # O Z-Image usa o modelo do tradutor como codificador de texto e o VAE do FLUX.1
 $escolhidos = $componentes | Where-Object {
@@ -147,7 +157,8 @@ $escolhidos = $componentes | Where-Object {
     ($flux -and $_.grupo -in @("flux", "fluxvae")) -or
     (($tradutor -or $zimage) -and $_.grupo -eq "tradutor") -or
     ($zimage -and $_.grupo -in @("zimage", "fluxvae")) -or
-    ($klein -and $_.grupo -eq "klein")
+    ($klein -and $_.grupo -eq "klein") -or
+    ($video -and $_.grupo -eq "video")
 }
 
 try {

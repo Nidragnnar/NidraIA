@@ -1110,3 +1110,38 @@ select:disabled {
         display: none;
     }
 }
+
+/* ========== NidraIA 0.7: vídeo ========== */
+.miniatura video,
+.vis-conteudo video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.vis-conteudo video {
+    max-height: 92vh;
+    object-fit: contain;
+    background: #07040d;
+}
+
+/* Selo "▶ 2 s" nas miniaturas de vídeo */
+.selo-video {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(14, 8, 24, 0.75);
+    color: var(--cor-ouro);
+    font-size: 0.75rem;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+@media (max-width: 860px) {
+    .vis-conteudo video {
+        max-height: 60vh;
+    }
+}

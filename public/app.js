@@ -5,6 +5,14 @@ const el = {
     estado: $("#estado"),
     estadoTexto: $("#estado-texto"),
     liberar: $("#liberar"),
+    duracao: $("#duracao"),
+    duracaoCampo: $("#duracao-campo"),
+    formatoCampo: $("#formato-campo"),
+    quantidadeCampo: $("#quantidade-campo"),
+    visVideo: $("#vis-video"),
+    visAnimar: $("#vis-animar"),
+    visVariacoes: $("#vis-variacoes"),
+    visEditar: $("#vis-editar"),
     promptRotulo: $("#prompt-rotulo"),
     modos: $("#modos"),
     modoDica: $("#modo-dica"),
@@ -93,9 +101,14 @@ function avisar(texto) {
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function formatoEscolhido() {
+    // Vídeo: tamanho fixo do modelo (832 × 480)
+    if (ehVideo()) return { largura: modeloAtual().padroes.largura, altura: modeloAtual().padroes.altura };
     const [largura, altura] = el.form.formato.value.split("x").map(Number);
     return { largura, altura };
 }
+
+// O modelo escolhido gera vídeo?
+const ehVideo = () => modeloAtual()?.tipo === "video";
 
 // ========== Estado do motor ==========
 const TEXTOS_ESTADO = {
@@ -184,6 +197,11 @@ function aplicarPadroes(modelo) {
     el.cfg.value = p.cfg;
     const formato = el.form.querySelector(`input[name=formato][value="${p.largura}x${p.altura}"]`);
     if (formato) formato.checked = true;
+    const video = modelo.tipo === "video";
+    el.duracaoCampo.hidden = !video;
+    el.formatoCampo.hidden = video;
+    el.quantidadeCampo.hidden = video;
+    if (video) el.duracao.value = String(p.segundos || 2);
     mostrarValores();
 }
 
@@ -296,16 +314,24 @@ const PROMPT_EXEMPLO = el.prompt.placeholder;
 function atualizarModo() {
     const podeEditar = Boolean(modeloAtual()?.edicao);
     const editar = modoEditar();
+    const video = ehVideo();
     el.modos.hidden = !podeEditar;
-    el.forcaCampo.hidden = editar;
-    el.modoDica.textContent = editar
-        ? 'A imagem é mantida e a IA muda só o que você pedir. Escreva a instrução lá em cima, ex.: "deixe o céu à noite" ou "coloque um chapéu de mago no gato".'
-        : podeEditar
-          ? ""
-          : 'Dica: com o modelo FLUX.2 klein dá para editar a imagem com instruções, ex.: "deixe o céu à noite".';
+    // No vídeo a imagem vira o primeiro quadro: não há "quanto a IA pode mudar"
+    el.forcaCampo.hidden = editar || video;
+    el.modoDica.textContent = video
+        ? 'O vídeo começa nesta imagem. Descreva no texto o movimento, ex.: "as nuvens passam e a água do lago se mexe". Funciona melhor com fotos e paisagens do que com logotipos.'
+        : editar
+          ? 'A imagem é mantida e a IA muda só o que você pedir. Escreva a instrução lá em cima, ex.: "deixe o céu à noite" ou "coloque um chapéu de mago no gato".'
+          : podeEditar
+            ? ""
+            : 'Dica: com o modelo FLUX.2 klein dá para editar a imagem com instruções, ex.: "deixe o céu à noite".';
     el.modoDica.hidden = !el.modoDica.textContent;
-    el.promptRotulo.textContent = editar ? "O que mudar na imagem?" : "O que você quer ver?";
-    el.prompt.placeholder = editar ? "Ex.: deixe o céu à noite, com estrelas" : PROMPT_EXEMPLO;
+    el.promptRotulo.textContent = video ? "O que acontece no vídeo?" : editar ? "O que mudar na imagem?" : "O que você quer ver?";
+    el.prompt.placeholder = video
+        ? "Ex.: um dragão dourado voando sobre montanhas roxas ao pôr do sol"
+        : editar
+          ? "Ex.: deixe o céu à noite, com estrelas"
+          : PROMPT_EXEMPLO;
 }
 
 // Passa a usar esta imagem como ponto de partida
@@ -420,7 +446,8 @@ async function gerar() {
         prompt: el.prompt.value,
         negativo: el.negativo.value,
         ...formatoEscolhido(),
-        quantidade: Number(el.quantidade.value),
+        quantidade: ehVideo() ? 1 : Number(el.quantidade.value),
+        segundos: Number(el.duracao.value),
         seed: seedTexto ? Number(seedTexto) : -1,
         passos: Number(el.passos.value),
         cfg: Number(el.cfg.value),
@@ -438,7 +465,7 @@ async function gerar() {
             traduzir: false,
         });
     }
-    await enviar("/api/gerar", pedido, pedido);
+    await enviar("/api/gerar", pedido, { ...pedido, video: ehVideo() });
 }
 
 // Envia um pedido de geração (normal ou de variações) e acompanha até o fim
@@ -499,7 +526,11 @@ async function acompanhar(id, pedido) {
             el.atualStatus.textContent = t.aviso || (t.fila > 0 ? `Na fila (posição ${t.fila})...` : "Preparando...");
             el.barra.style.width = "0%";
         } else if (t.status === "generating") {
-            el.atualStatus.textContent = t.totalPassos ? `Gerando: passo ${t.passo} de ${t.totalPassos} · ${segundos}s` : `Gerando... ${segundos}s`;
+            el.atualStatus.textContent = t.totalPassos
+                ? `Gerando: passo ${t.passo} de ${t.totalPassos} · ${segundos}s`
+                : pedido.video
+                  ? `Gerando o vídeo... ${segundos}s (leva alguns minutos)`
+                  : `Gerando... ${segundos}s`;
             if (t.totalPassos) el.barra.style.width = `${(t.passo / t.totalPassos) * 100}%`;
             if (t.previa) {
                 const primeira = el.atualImagens.firstElementChild;
@@ -560,11 +591,22 @@ function criarMiniatura(item) {
     botao.className = "miniatura";
     botao.title = item.prompt;
     botao.style.aspectRatio = `${item.largura} / ${item.altura}`;
-    const img = document.createElement("img");
-    img.src = `/galeria/${item.arquivo}`;
-    img.alt = item.prompt;
-    img.loading = "lazy";
-    botao.append(img);
+    if (item.tipo === "video") {
+        // Vídeo: toca mudo e em loop, com a duração no canto
+        const video = document.createElement("video");
+        video.src = `/galeria/${item.arquivo}`;
+        Object.assign(video, { muted: true, loop: true, autoplay: true, playsInline: true, preload: "metadata" });
+        const selo = document.createElement("span");
+        selo.className = "selo-video";
+        selo.textContent = `▶ ${item.duracao ? Math.round(item.duracao) : ""} s`;
+        botao.append(video, selo);
+    } else {
+        const img = document.createElement("img");
+        img.src = `/galeria/${item.arquivo}`;
+        img.alt = item.prompt;
+        img.loading = "lazy";
+        botao.append(img);
+    }
     botao.addEventListener("click", () => abrir(item));
     return botao;
 }
@@ -587,18 +629,34 @@ async function carregarGaleria() {
 // ========== Visualizador ==========
 function abrir(item) {
     abertoNoVisualizador = item;
-    el.visImagem.src = `/galeria/${item.arquivo}`;
+    const video = item.tipo === "video";
+    el.visImagem.hidden = video;
+    el.visVideo.hidden = !video;
+    if (video) {
+        el.visVideo.src = `/galeria/${item.arquivo}`;
+        el.visImagem.removeAttribute("src");
+    } else {
+        el.visVideo.pause();
+        el.visVideo.removeAttribute("src");
+        el.visImagem.src = `/galeria/${item.arquivo}`;
+    }
     el.visImagem.alt = item.prompt;
+    // Variações, edição, aumento e "Animar" só valem para imagens
+    el.visVariacoes.hidden = video;
+    el.visEditar.hidden = video;
+    el.visAnimar.hidden = video;
     el.visPrompt.textContent = item.prompt;
     el.visOriginal.hidden = !item.promptOriginal;
     el.visOriginal.textContent = item.promptOriginal ? `Você escreveu: ${item.promptOriginal}` : "";
     el.visBaixar.href = `/galeria/${item.arquivo}`;
     // Até 4096 px por lado depois de aumentar (mais que isso fica lento e pesado demais)
-    el.visAumentarGrupo.hidden = !upscalers.length || item.largura * 4 > 4096 || item.altura * 4 > 4096;
-    el.visBaixar.download = `${item.id}.png`;
+    el.visAumentarGrupo.hidden = video || !upscalers.length || item.largura * 4 > 4096 || item.altura * 4 > 4096;
+    el.visBaixar.download = `${item.id}.${video ? "webm" : "png"}`;
 
     const dados = [
         ["Tamanho", `${item.largura} × ${item.altura}`],
+        ...(video ? [["Duração", `${(item.duracao ?? 0).toFixed(1)} s (${item.quadros} quadros)`]] : []),
+        ...(item.animada ? [["Animado", "a partir de uma imagem"]] : []),
         ["Semente", item.seed ?? "aleatória"],
         ["Passos", item.passos],
         ["CFG", item.cfg],
@@ -625,6 +683,7 @@ function abrir(item) {
 }
 
 $("#vis-fechar").addEventListener("click", () => el.vis.close());
+el.vis.addEventListener("close", () => el.visVideo.pause());
 el.vis.addEventListener("click", (evento) => {
     if (evento.target === el.vis) el.vis.close();
 });
@@ -641,6 +700,7 @@ $("#vis-reusar").addEventListener("click", () => {
     const formato = el.form.querySelector(`input[name=formato][value="${item.largura}x${item.altura}"]`);
     if (formato) formato.checked = true;
     el.quantidade.value = "1";
+    if (item.duracao) el.duracao.value = String(Math.min(3, Math.max(1, Math.round(item.duracao))));
     el.seed.value = item.seed ?? "";
     el.passos.value = item.passos;
     el.cfg.value = item.cfg;
@@ -649,6 +709,27 @@ $("#vis-reusar").addEventListener("click", () => {
     el.prompt.focus();
     const outroModelo = item.modelo !== modeloAtual()?.nome;
     avisar(outroModelo ? `Configurações carregadas. A imagem foi feita com ${item.modelo}: troque o modelo para repetir igual.` : "Configurações carregadas. Mesma semente = mesma imagem.");
+});
+
+// Animar: a imagem da galeria vira o primeiro quadro de um vídeo (modelo de vídeo)
+el.visAnimar.addEventListener("click", () => {
+    const item = abertoNoVisualizador;
+    if (!ehVideo()) {
+        avisar("Para animar, troque o modelo para Vídeo · Wan 2.2.");
+        return;
+    }
+    const url = `/galeria/${item.arquivo}`;
+    const img = new Image();
+    img.onload = () => {
+        usarImagem(img, url, "Imagem da galeria");
+        el.prompt.value = "";
+        fecharConferencia();
+        el.vis.close();
+        el.prompt.focus();
+        avisar("Descreva o movimento e clique em Gerar. O vídeo começa nesta imagem.");
+    };
+    img.onerror = () => avisar("Não consegui abrir essa imagem.");
+    img.src = url;
 });
 
 // Editar com instrução: leva a imagem da galeria para "Partir de uma imagem sua" já no modo de edição

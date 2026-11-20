@@ -102,7 +102,17 @@
             </details>
 
             <h2 class="secao"><span>3</span> Tamanho e quantidade</h2>
-            <fieldset class="campo">
+            <!-- Só no modelo de vídeo: no lugar de formato e quantidade -->
+            <label class="campo" id="duracao-campo" hidden>
+                <span>Duração do vídeo</span>
+                <select id="duracao">
+                    <option value="1">1 segundo (uns 2 a 3 minutos)</option>
+                    <option value="2" selected>2 segundos (uns 5 a 6 minutos)</option>
+                    <option value="3">3 segundos (uns 8 a 10 minutos)</option>
+                </select>
+                <small>O vídeo sai em 832 × 480 e fica salvo na galeria (arquivo .webm).</small>
+            </label>
+            <fieldset class="campo" id="formato-campo">
                 <legend>Formato</legend>
                 <div class="formatos" id="formatos">
                     <label><input type="radio" name="formato" value="512x512" checked><span><i class="q11"></i>Quadrado</span></label>
@@ -113,7 +123,7 @@
             </fieldset>
 
             <div class="duas">
-                <label class="campo">
+                <label class="campo" id="quantidade-campo">
                     <span>Quantidade</span>
                     <select id="quantidade">
                         <option value="1">1 imagem</option>
@@ -173,6 +183,7 @@
     <dialog id="visualizador" class="visualizador">
         <div class="vis-conteudo">
             <img id="vis-imagem" alt="">
+            <video id="vis-video" controls loop muted autoplay playsinline hidden></video>
             <aside class="vis-info">
                 <button type="button" class="fechar" id="vis-fechar" aria-label="Fechar">✕</button>
                 <h3>Prompt</h3>
@@ -182,6 +193,7 @@
                 <div class="vis-acoes">
                     <button type="button" class="botao" id="vis-variacoes" title="Gera 4 imagens parecidas com esta">Gerar 4 variações</button>
                     <button type="button" class="botao botao-secundario" id="vis-editar" title="Mantém a imagem e muda só o que você pedir (FLUX.2 klein)">Editar com instrução</button>
+                    <button type="button" class="botao botao-secundario" id="vis-animar" title="Faz um vídeo curto que começa nesta imagem (modelo de vídeo). Experimental: a imagem pode deformar">Animar (vídeo, experimental)</button>
                     <div class="aumentar" id="vis-aumentar-grupo" hidden>
                         <select id="vis-upscaler" aria-label="Tipo de imagem para aumentar"></select>
                         <button type="button" class="botao botao-secundario" id="vis-aumentar">Aumentar 4×</button>

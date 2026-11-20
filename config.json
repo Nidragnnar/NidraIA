@@ -80,6 +80,30 @@
                 "amostrador": "euler"
             },
             "maxPassos": 12
+        },
+        {
+            "id": "wan22-video",
+            "nome": "Vídeo · Wan 2.2",
+            "tipo": "video",
+            "descricao": "Gera vídeos curtos (1 a 3 s) a partir do texto, ou anima uma imagem sua. Leva uns 2 a 3 minutos por segundo de vídeo.",
+            "licenca": "Apache 2.0: livre, inclusive uso comercial",
+            "multiplo": 32,
+            "arquivos": {
+                "diffusion-model": "wan22-ti2v-5b/Wan2.2-TI2V-5B-Q4_K_M.gguf",
+                "t5xxl": "wan22-ti2v-5b/umt5-xxl-encoder-Q4_K_M.gguf",
+                "vae": "wan22-ti2v-5b/Wan2.2_VAE.safetensors"
+            },
+            "padroes": {
+                "largura": 832,
+                "altura": 480,
+                "passos": 20,
+                "cfg": 5,
+                "amostrador": "euler",
+                "flowShift": 5,
+                "fps": 16,
+                "segundos": 2
+            },
+            "maxPassos": 30
         }
     ],
     "tradutor": {

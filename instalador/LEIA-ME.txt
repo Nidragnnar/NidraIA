@@ -9,7 +9,8 @@ O QUE PRECISA
 - Placa de video AMD, NVIDIA ou Intel com pelo menos 6 GB
   (8 GB ou mais e o ideal) e o driver atualizado
 - Uns 17 GB livres no disco com as respostas padrao do instalador
-  (SDXL Turbo, FLUX.2 klein e tradutor). Cerca de 31 GB com tudo.
+  (SDXL Turbo, FLUX.2 klein e tradutor). Cerca de 40 GB com tudo,
+  incluindo o modelo de video (8,5 GB).
 
 COMO INSTALAR (so na primeira vez)
 1. Extraia esta pasta inteira onde quiser (de preferencia num disco
@@ -39,6 +40,11 @@ DICAS
   SDXL Turbo: o mais rapido em tamanho pequeno, bom para testar ideias.
   Z-Image Turbo: fotos muito realistas.
   FLUX.1 schnell: bonito, mas o mais lento.
+  Video - Wan 2.2 (opcional): videos curtos de 1 a 3 segundos.
+- VIDEO: escolha o modelo "Video - Wan 2.2", escreva o que acontece e
+  escolha a duracao. Demora: uns 2 a 3 minutos por segundo de video.
+  Para animar uma imagem da galeria, clique nela e em "Animar (video)".
+  Animar e experimental: funciona melhor com fotos e paisagens.
 - Quer um texto escrito na imagem (placa, letreiro)? Use o FLUX.2 klein
   ou o Z-Image e escreva o texto entre aspas, ex.: uma placa escrita "BAR DO ZE".
 - Com o FLUX.2 klein da para EDITAR uma imagem: clique numa imagem da

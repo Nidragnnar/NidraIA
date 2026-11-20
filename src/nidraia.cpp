@@ -454,6 +454,7 @@ struct Trabalho {
     json pedido;             // configurações usadas, salvas junto da imagem
     json corpoMotor;         // pedido mandado ao motor, guardado para tentar de novo
     std::string idMotor;     // id atual no motor (vazio enquanto o motor recarrega para tentar de novo)
+    std::string rota = "/sdcpp/v1/img_gen";  // endereço do motor: imagem ou vídeo
     bool refeito = false;    // já tentou de novo depois de faltar memória
     bool cancelado = false;  // cancelado enquanto o motor recarregava
     // Última vez que a tela perguntou por ele; se a página fechar, o NidraIA mesmo recolhe o resultado
@@ -511,15 +512,21 @@ static void aplicarEstilo(json& pedido, const std::string& id) {
     throw ErroHttp(422, "Estilo desconhecido.");
 }
 
+static bool ehVideo(const json& modelo) {
+    return modelo.value("tipo", "imagem") == "video";
+}
+
 static json montarPedido(const json& corpo, const json& modelo) {
     const auto& p = modelo["padroes"];
+    const bool video = ehVideo(modelo);
     std::string prompt = texto(corpo, "prompt");
     if (prompt.empty()) throw ErroHttp(422, "Escreva o que você quer ver na imagem.");
     if (prompt.size() > 4000) throw ErroHttp(422, "O prompt está grande demais.");
 
-    // Lados múltiplos de 64, como os modelos esperam
+    // Lados múltiplos de 64 (ou do que o modelo pedir: o de vídeo usa 32, para caber 832 × 480)
+    const double multiplo = modelo.value("multiplo", 64);
     auto lado = [&](const char* campo, int padrao) {
-        return static_cast<int>(std::lround(numero(corpo, campo, 256, 1536, padrao) / 64.0) * 64);
+        return static_cast<int>(std::lround(numero(corpo, campo, 256, 1536, padrao) / multiplo) * multiplo);
     };
     std::string negativo = texto(corpo, "negativo").substr(0, 4000);
     bool traduzirPrompt = corpo.value("traduzir", false);
@@ -533,10 +540,21 @@ static json montarPedido(const json& corpo, const json& modelo) {
         {"passos", static_cast<int>(std::lround(numero(corpo, "passos", 1, modelo["maxPassos"].get<int>(), p["passos"].get<int>())))},
         {"cfg", numero(corpo, "cfg", 1, 20, p["cfg"].get<double>())},
         {"seed", sementeOuSorteio(corpo)},
-        {"quantidade", static_cast<int>(std::lround(numero(corpo, "quantidade", 1, 4, 1)))},
+        {"quantidade", video ? 1 : static_cast<int>(std::lround(numero(corpo, "quantidade", 1, 4, 1)))},
         {"amostrador", p["amostrador"]},
         {"traduzido", traduzirPrompt},
     };
+    if (video) {
+        // O modelo de vídeo pede 4·n + 1 quadros: a 16 por segundo, 1 s = 17, 2 s = 33, 3 s = 49
+        int fps = p.value("fps", 16);
+        double segundos = numero(corpo, "segundos", 1, 3, p.value("segundos", 2));
+        int quadros = static_cast<int>(std::lround(segundos * fps / 4.0)) * 4 + 1;
+        pedido["tipo"] = "video";
+        pedido["quadros"] = quadros;
+        pedido["fps"] = fps;
+        pedido["duracao"] = (quadros - 1) / static_cast<double>(fps);
+        pedido["flowShift"] = p.value("flowShift", 5.0);
+    }
     if (traduzirPrompt) {
         pedido["promptOriginal"] = prompt;
         pedido["prompt"] = traduzir(prompt);
@@ -578,6 +596,29 @@ static json paraMotor(const json& pedido, const std::string& imagemBase = "", do
         // Codificar a imagem de entrada pede bastante memória de vídeo; em blocos cabe em placas de 8 GB
         motor["vae_tiling_params"] = {{"enabled", true}};
     }
+    return motor;
+}
+
+// Vídeo (Wan 2.2): sai em WebM; com imagem, o vídeo começa nela
+static json paraMotorVideo(const json& pedido, const std::string& imagemBase) {
+    json motor = {
+        {"prompt", pedido["prompt"]},
+        {"negative_prompt", pedido["negativo"]},
+        {"width", pedido["largura"]},
+        {"height", pedido["altura"]},
+        {"seed", pedido["seed"]},
+        {"video_frames", pedido["quadros"]},
+        {"fps", pedido["fps"]},
+        {"output_format", "webm"},
+        {"sample_params",
+         {{"sample_method", pedido["amostrador"]},
+          {"sample_steps", pedido["passos"]},
+          {"flow_shift", pedido["flowShift"]},
+          {"guidance", {{"txt_cfg", pedido["cfg"]}}}}},
+        // Montar os quadros pede muita memória; em blocos cabe em placas de 8 GB
+        {"vae_tiling_params", {{"enabled", true}}},
+    };
+    if (!imagemBase.empty()) motor["init_image"] = imagemBase;
     return motor;
 }
 
@@ -651,7 +692,22 @@ static json salvarImagens(const json& trabalho, const json& pedido) {
     }
 
     json salvas = json::array();
-    for (const auto& imagem : trabalho["result"]["images"]) {
+    const auto& resultado = trabalho["result"];
+    // Vídeo: o motor devolve um arquivo só (WebM), não uma lista de imagens
+    if (resultado.contains("b64_json") && resultado["b64_json"].is_string()) {
+        std::string id = trabalho["id"].get<std::string>() + "-v";
+        gravar(pasta / (id + ".webm"), decodificarBase64(resultado["b64_json"].get<std::string>()));
+        json info = pedido;
+        info["id"] = id;
+        info["arquivo"] = dia + "/" + id + ".webm";
+        info["criadoEm"] = agoraIso();
+        info["segundos"] = segundos;
+        if (resultado.contains("frame_count")) info["quadros"] = resultado["frame_count"];
+        gravar(pasta / (id + ".json"), info.dump(2));
+        salvas.push_back(info);
+        return salvas;
+    }
+    for (const auto& imagem : resultado["images"]) {
         int indice = imagem["index"].get<int>();
         std::string id = std::format("{}-{}", trabalho["id"].get<std::string>(), indice);
         gravar(pasta / (id + ".png"), decodificarBase64(imagem["b64_json"].get<std::string>()));
@@ -719,6 +775,7 @@ static json listaModelos() {
                          {"nome", modelo["nome"]},
                          {"descricao", modelo["descricao"]},
                          {"edicao", modelo.value("edicao", false)},
+                         {"tipo", modelo.value("tipo", "imagem")},
                          {"licenca", modelo["licenca"]},
                          {"padroes", modelo["padroes"]},
                          {"maxPassos", modelo["maxPassos"]},
@@ -734,11 +791,13 @@ static const json& modeloProntoOuErro() {
 }
 
 // Manda o pedido para a fila do motor e guarda as configurações para salvar junto da imagem
-static std::string enfileirar(const json& pedido, const json& corpoMotor) {
-    json trabalho = chamarMotor("POST", "/sdcpp/v1/img_gen", corpoMotor);
+static std::string enfileirar(const json& pedido, const json& corpoMotor, const std::string& rota = "/sdcpp/v1/img_gen") {
+    json trabalho = chamarMotor("POST", rota, corpoMotor);
     std::string id = trabalho["id"].get<std::string>();
     std::lock_guard trava(mutexPedidos);
-    pedidos[id] = Trabalho{pedido, corpoMotor, id};
+    Trabalho novo{pedido, corpoMotor, id};
+    novo.rota = rota;
+    pedidos[id] = novo;
     return id;
 }
 
@@ -920,6 +979,15 @@ static void configurarRotas(httplib::Server& servidor) {
         }
         // "editar": a imagem enviada é mantida e o prompt diz o que mudar nela (só em modelos de edição)
         bool editar = texto(corpo, "modo") == "editar";
+        if (ehVideo(modelo)) {
+            // Vídeo: com imagem, ela vira o primeiro quadro ("Animar")
+            if (editar) throw ErroHttp(422, "O modelo de vídeo não edita imagens. Troque para o FLUX.2 klein.");
+            json pedido = montarPedido(corpo, modelo);
+            pedido["modelo"] = modelo["nome"];
+            if (!imagemBase.empty()) pedido["animada"] = true;
+            std::string id = enfileirar(pedido, paraMotorVideo(pedido, imagemBase), "/sdcpp/v1/vid_gen");
+            return responderJson(res, 202, {{"id", id}, {"prompt", pedido["prompt"]}, {"traduzido", pedido["traduzido"]}});
+        }
         if (editar && imagemBase.empty()) throw ErroHttp(422, "Envie a imagem que você quer editar.");
         if (editar && !modelo.value("edicao", false))
             throw ErroHttp(422, "Este modelo não edita com instruções. Troque o modelo para o FLUX.2 klein.");
@@ -954,6 +1022,7 @@ static void configurarRotas(httplib::Server& servidor) {
         for (const auto& item : listarGaleria())
             if (item["id"] == idImagem) original = item;
         if (original.is_null()) throw ErroHttp(404, "Imagem não encontrada.");
+        if (original.value("tipo", "imagem") == "video") throw ErroHttp(422, "Aumentar a resolução só funciona com imagens.");
         // Até 4096 px por lado: acima disso fica lento demais e a imagem pesa centenas de MB
         if (original["largura"].get<int>() * 4 > 4096 || original["altura"].get<int>() * 4 > 4096)
             throw ErroHttp(422, "Esta imagem já é grande demais para aumentar 4× (o limite é 4096 px por lado).");
@@ -998,9 +1067,11 @@ static void configurarRotas(httplib::Server& servidor) {
         for (const auto& item : listarGaleria())
             if (item["id"] == idImagem) original = item;
         if (original.is_null()) throw ErroHttp(404, "Imagem não encontrada.");
+        if (original.value("tipo", "imagem") == "video") throw ErroHttp(422, "Variações só funcionam com imagens.");
 
         acordarMotor();
         const json& modelo = modeloProntoOuErro();
+        if (ehVideo(modelo)) throw ErroHttp(422, "Variações não funcionam com o modelo de vídeo. Troque para um modelo de imagem.");
         json base = {
             {"prompt", original["prompt"]},
             {"negativo", original.value("negativo", "")},
@@ -1029,6 +1100,7 @@ static void configurarRotas(httplib::Server& servidor) {
         std::string idMotor = id;
         bool esperandoMotor = false, cancelado = false;
         json corpoReenvio;
+        std::string rotaReenvio = "/sdcpp/v1/img_gen";
         {
             std::lock_guard trava(mutexPedidos);
             auto encontrado = pedidos.find(id);
@@ -1037,7 +1109,10 @@ static void configurarRotas(httplib::Server& servidor) {
                 trabalho.ultimaConsulta = std::chrono::steady_clock::now();
                 cancelado = trabalho.cancelado;
                 esperandoMotor = trabalho.idMotor.empty();
-                if (esperandoMotor) corpoReenvio = trabalho.corpoMotor;
+                if (esperandoMotor) {
+                    corpoReenvio = trabalho.corpoMotor;
+                    rotaReenvio = trabalho.rota;
+                }
                 idMotor = trabalho.idMotor;
                 if (cancelado) pedidos.erase(encontrado);
             }
@@ -1071,7 +1146,7 @@ static void configurarRotas(httplib::Server& servidor) {
                 return responderJson(res, 200, {{"status", "failed"}, {"erro", SEM_MEMORIA}});
             }
             // Motor recarregado: reenvia o mesmo pedido
-            json novo = chamarMotor("POST", "/sdcpp/v1/img_gen", corpoReenvio);
+            json novo = chamarMotor("POST", rotaReenvio, corpoReenvio);
             std::lock_guard trava(mutexPedidos);
             if (auto encontrado = pedidos.find(id); encontrado != pedidos.end())
                 encontrado->second.idMotor = novo["id"].get<std::string>();
